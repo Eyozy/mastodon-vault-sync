@@ -190,21 +190,26 @@ def format_single_post_for_archive(post, media_folder_name, media_file_map):
         source_link_text = "**原始嘟文**"
 
     content_md = md(post["content"], heading_style="ATX").strip()
-    source_link = f"{source_link_text}\uFF1A\n{post['url']}"
+    source_link_part = f"{source_link_text}\uFF1A{post['url']}"
+    content_part = f"**内容**\uFF1A{content_md}"
     
     attachments_md = ""
     if post["media_attachments"]:
-        attachments_md += "\n"
+        if content_md:
+            attachments_md += "\n\n" # 与内容文本隔开
+        
+        media_parts = []
         for media in post["media_attachments"]:
             local_filename = media_file_map.get(media['id'])
             if local_filename:
                 media_path = f"{media_folder_name}/{local_filename}"
                 if media["type"] == "image":
-                    attachments_md += f"![{media.get('description') or 'Image'}]({media_path})\n"
+                    media_parts.append(f"![{media.get('description') or 'Image'}]({media_path})")
                 else:
-                    attachments_md += f"[{'观看视频' if media['type'] in ['video', 'gifv'] else '查看附件'}]({media_path})\n"
+                    media_parts.append(f"[{'观看视频' if media['type'] in ['video', 'gifv'] else '查看附件'}]({media_path})")
+        attachments_md += "\n".join(media_parts)
 
-    return f"{heading}\n\n**内容**\uFF1A\n{content_md}{attachments_md}\n\n{source_link}\n\n---\n"
+    return f"{heading}\n\n{content_part}{attachments_md}\n\n{source_link_part}\n\n---\n\n"
 
 def format_post_for_single_file(post, media_folder_name, media_file_map):
     """将单个帖子格式化为独立的 Markdown 文件内容"""
@@ -280,8 +285,8 @@ def update_archive_file(posts_to_update, config, all_posts_from_server):
     # 2. 将新帖子和已编辑的帖子更新到字典中
     for post in posts_to_update:
         formatted_post = format_single_post_for_archive(post, media_folder_name, config["media_file_map"])
-        # 移除末尾的分隔符和多余的换行符
-        existing_posts_by_id[post['id']] = formatted_post.strip().rstrip('---').strip()
+        # 保持完整的格式，包括分隔符
+        existing_posts_by_id[post['id']] = formatted_post.strip()
 
     # 3. (仅增量同步) 检查并移除已删除的帖子
     if not config.get("is_full_sync", False):
@@ -298,15 +303,8 @@ def update_archive_file(posts_to_update, config, all_posts_from_server):
     # 4. 从字典重新生成帖子列表并按日期分组
     rebuilt_posts_by_day = defaultdict(list)
     
-    # 创建一个包含所有帖子完整数据的字典，用于查找时间戳
     all_posts_dict = {p['id']: p for p in all_posts_from_server}
-    # 将旧的帖子也加入，以防它们不在 all_posts_from_server 中
-    for post_id in existing_posts_by_id.keys():
-        if post_id not in all_posts_dict:
-            # 这是一个无法获取完整数据的旧帖子，我们需要一个策略
-            # 暂时跳过，因为没有时间戳无法排序
-            pass
-
+    
     for post_id, content in existing_posts_by_id.items():
         if post_id in all_posts_dict:
             post_data = all_posts_dict[post_id]
@@ -321,8 +319,8 @@ def update_archive_file(posts_to_update, config, all_posts_from_server):
         final_content += f"# {date_str}\n\n"
         day_posts = sorted(rebuilt_posts_by_day[date_str], key=lambda p: p['created_at'], reverse=True)
         # 使用 --- 分隔符重新连接帖子
-        final_content += '---\n'.join([p['content'] for p in day_posts])
-        final_content += '\n---\n'
+        final_content += '\n'.join([p['content'] for p in day_posts])
+        final_content += '\n\n'
             
     # 6. 将完全更新后的内容写回文件
     with open(archive_file_path, 'w', encoding='utf-8') as f:
@@ -352,7 +350,6 @@ def save_posts(posts, config, all_posts_from_server):
     
     config["media_file_map"] = media_file_map
 
-    # 关键改动：将 all_posts_from_server 传递下去
     update_archive_file(posts, config, all_posts_from_server)
 
     posts_folder_path.mkdir(parents=True, exist_ok=True)
@@ -399,7 +396,6 @@ def cleanup_deleted_posts(config):
     local_post_files = list(posts_folder_path.glob("*.md"))
     deleted_count = 0
     for file_path in local_post_files:
-        # 从文件名中解析 post_id
         match = re.search(r'_(\d+)\.md$', file_path.name)
         if match:
             post_id = match.group(1)
@@ -409,7 +405,6 @@ def cleanup_deleted_posts(config):
                 deleted_count += 1
     
     logging.info(f"✅ 清理完成，共删除了 {deleted_count} 个已不存在的帖子备份。")
-    # 注意：此模式不更新 archive.md，需要一次全量同步来刷新它。
     logging.warning("⚠️  请注意：清理模式只删除了单条备份文件。要更新汇总文件，请运行一次强制全量同步。")
 
 
@@ -421,7 +416,6 @@ def main():
     
     config = get_config()
     
-    # 检查是否是清理模式
     if "--cleanup" in sys.argv:
         cleanup_deleted_posts(config)
         logging.info("========================================")
