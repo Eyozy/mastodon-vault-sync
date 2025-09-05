@@ -1,60 +1,137 @@
 name: Mastodon Vault Sync
 
 on:
-  schedule:
-    - cron: '0 */3 * * *'
-  
+  # 允许您从 Actions 标签页手动触发此工作流
   workflow_dispatch:
     inputs:
       force_full_sync:
-        description: 'Force full sync (re-formats archive.md)'
+        description: 'Force a full re-sync of all posts'
         required: false
         type: boolean
         default: false
+        
+  # 按计划运行（每 3 小时一次）
+  schedule:
+    - cron: '0 */3 * * *'
 
 jobs:
-  sync:
+  sync-and-deploy:
+    name: Sync Mastodon and Deploy Archive
     runs-on: ubuntu-latest
     
+    # 两种模式都需要写入权限
     permissions:
       contents: write
     
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
+      # =====================================================
+      # 步骤 1：检出、安装和运行同步脚本（所有模式通用）
+      # =====================================================
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
+      - name: Set up Python Environment
+        uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
-      - name: Install dependencies
+      - name: Install Python Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
-      - name: Run sync script
+      - name: Run Mastodon Sync Script
         env:
+          GITHUB_ACTIONS: "true"
           MASTODON_INSTANCE_URL: ${{ secrets.MASTODON_INSTANCE_URL }}
           MASTODON_USER_ID: ${{ secrets.MASTODON_USER_ID }}
           MASTODON_ACCESS_TOKEN: ${{ secrets.MASTODON_ACCESS_TOKEN }}
           ARCHIVE_FILENAME: ${{ secrets.ARCHIVE_FILENAME }}
-          POSTS_FOLDER: ${{ secrets.POSTS_FOLDER }}
-          MEDIA_FOLDER: ${{ secrets.MEDIA_FOLDER }}
+          # 使用固定的文件夹名称，确保所有帖子和媒体文件分别存放在 mastodon 和 media 文件夹下
+          POSTS_FOLDER: mastodon
+          MEDIA_FOLDER: media
           CHECK_EDIT_LIMIT: ${{ secrets.CHECK_EDIT_LIMIT }}
-          FORCE_FULL_SYNC: ${{ github.event.inputs.force_full_sync }}
+          FORCE_FULL_SYNC: ${{ github.event.inputs.force_full_sync == 'true' }}
         run: python main.py
 
-      - name: Commit and push changes
+      - name: Set Environment Variables from Secrets
         run: |
+          echo "ENABLE_PUSH_TO_DATA_REPO=${{ secrets.ENABLE_PUSH_TO_DATA_REPO }}" >> $GITHUB_ENV
+          echo "TARGET_REPO_PAT=${{ secrets.TARGET_REPO_PAT }}" >> $GITHUB_ENV
+          echo "TARGET_REPO_USERNAME=${{ secrets.TARGET_REPO_USERNAME }}" >> $GITHUB_ENV
+          echo "TARGET_REPO_NAME=${{ secrets.TARGET_REPO_NAME }}" >> $GITHUB_ENV
+          # 设置固定的文件夹名称，确保所有帖子和媒体文件分别存放在 mastodon 和 media 文件夹下
+          echo "POSTS_FOLDER=mastodon" >> $GITHUB_ENV
+          echo "MEDIA_FOLDER=media" >> $GITHUB_ENV
+          echo "ARCHIVE_FILENAME=${{ secrets.ARCHIVE_FILENAME || 'archive.md' }}" >> $GITHUB_ENV
+
+      # ===================================================================
+      # 步骤 2-A (默认模式): 提交并推送到当前仓库
+      # 仅当 "开关" 未设置为 'true' 时运行
+      # ===================================================================
+      - name: Commit and Push to Current Repository (Default)
+        if: ${{ env.ENABLE_PUSH_TO_DATA_REPO != 'true' }}
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          
+          # 确保文件夹结构存在
+          mkdir -p mastodon media
+          
           if [[ -z $(git status --porcelain) ]]; then
-            echo "No changes to commit."
+            echo "No changes detected. Nothing to commit."
             exit 0
           fi
           
-          echo "Pushing changes to current repository..."
-          git config --global user.name 'github-actions[bot]'
-          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-          git add .
-          git commit -m "Automated sync: Update Mastodon posts"
+          echo "Changes detected. Committing and pushing to the current repository..."
+          git add -A
+          git commit -m "Automated Sync: Update Mastodon archive" -m "Last updated on $(date -u)"
           git push
+
+      # ===================================================================
+      # 步骤 2-B (可选模式): 推送到独立的远程数据仓库
+      # 仅当 "开关" 设置为 'true' 且所有必需的 Secret 都存在时运行
+      # ===================================================================
+      - name: Push to a Separate Data Repository (Optional)
+        if: ${{ env.ENABLE_PUSH_TO_DATA_REPO == 'true' && env.TARGET_REPO_PAT && env.TARGET_REPO_USERNAME && env.TARGET_REPO_NAME }}
+        run: |
+          echo "Pushing backup files to data repository: ${{ env.TARGET_REPO_USERNAME }}/${{ env.TARGET_REPO_NAME }}"
+          
+          # 克隆数据仓库
+          git clone https://x-access-token:${{ env.TARGET_REPO_PAT }}@github.com/${{ env.TARGET_REPO_USERNAME }}/${{ env.TARGET_REPO_NAME }}.git data_repo
+          
+          # 定义文件和文件夹变量
+          POSTS_DIR=mastodon
+          MEDIA_DIR=media
+          ARCHIVE_FILE=${{ env.ARCHIVE_FILENAME || 'archive.md' }}
+
+          # 确保目标仓库中存在正确的文件夹结构
+          cd data_repo
+          mkdir -p "$POSTS_DIR" "$MEDIA_DIR"
+          
+          # 清理旧的备份文件，确保完全同步
+          rm -rf "$POSTS_DIR" "$MEDIA_DIR" "$ARCHIVE_FILE" "README.md" "heatmap.svg"
+          
+          # 首先将文件复制到临时位置
+          cp -r "../$POSTS_DIR" ./
+          cp -r "../$MEDIA_DIR" ./
+          cp "../$ARCHIVE_FILE" ./
+          cp "../README.md" ./
+          cp "../heatmap.svg" ./
+          
+          # 确保文件在正确的位置，没有错误地移动到根目录
+          echo "File structure check completed"
+          
+          git config user.name "Mastodon Sync Action"
+          git config user.email "action@github.com"
+          
+          git add .
+          
+          if git diff --staged --quiet; then
+            echo "✅ Data has no changes, no push needed."
+          else
+            echo "🚀 Data updated, committing and pushing..."
+            git commit -m "Automated Mastodon backup"
+            git push
+            echo "✅ Push to data repository successful!"
+          fi

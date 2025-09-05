@@ -5,14 +5,18 @@
 ## ✨ 核心功能
 
 * **双重备份模式：**
-    * **汇总归档：** 所有帖子会被整理到一个位于仓库**根目录**的单一 Markdown 文件中（默认为 `archive.md`），方便您按时间线浏览。
+    * **汇总归档：** 所有帖子会被整理到一个位于仓库根目录的单一 Markdown 文件中（默认为 `archive.md`），方便您按时间线浏览。
     * **独立文件：** 每一条帖子都会被保存为一个独立的 Markdown 文件，存放在指定文件夹中（默认为 `mastodon/`），便于独立引用和管理。
-* **全媒体备份：** 自动下载所有嘟文中的图片、视频等媒体文件到指定文件夹（默认为 `media/`），并在所有备份文件中使用本地相对路径链接，**实现真正的离线浏览**。
+* **全媒体备份：** 自动下载所有嘟文中的图片、视频等媒体文件到指定文件夹（默认为 `media/`），并在所有备份文件中使用本地相对路径链接，实现真正的离线浏览。
+* **活动总结报告：** 自动生成包含年度热力图的活动总结文件（默认为 `README.md`），直观展示您的发帖活跃度。
 * **自动化与智能化：**
     * **定时执行：** 基于 GitHub Actions，可实现无人值守的定时同步（例如每 3 小时一次）。
-    * **智能同步：** 自动检测备份状态。首次运行执行**全量备份**；后续运行只同步新帖子和已编辑的帖子，高效节能。
+    * **智能同步：** 自动检测备份状态。首次运行执行全量备份；后续运行只同步新帖子和已编辑的帖子，高效节能。
     * **安全可靠：** 通过 GitHub Secrets 管理您的个人凭证，确保 API 令牌等敏感信息不被泄露。
 * **高度可定制：** 您可以自由定义所有备份文件夹和文件的名称，满足个性化需求。
+* **双重部署模式：**
+    * **当前仓库：** 备份文件直接提交到当前仓库
+    * **远程仓库：** 备份文件同步到独立的远程数据仓库（可选）
 
 ## 📁 项目结构
 ```
@@ -29,10 +33,12 @@ mastodon-sync/
 ├── main.py                   # 主程序脚本
 ├── config.example.yaml       # 本地运行的配置文件模板
 ├── requirements.txt          # Python 依赖列表
-├── README.md                 # 项目说明文档 (您正在阅读)
+├── README.md                 # 项目说明文档
 ├── archive.md                # (生成) 汇总归档文件
+├── README.md                 # (生成) 活动总结报告
 └── sync_state.json           # (生成) 同步状态记录
 ```
+
 ## 🔑 获取 Mastodon API 凭证
 
 在使用本工具之前，您需要获取三项关键信息：**实例地址**、**用户 ID** 和 **访问令牌**。
@@ -82,7 +88,56 @@ mastodon-sync/
 | `MEDIA_FOLDER`          | `media`                             | **【可选】** 存放媒体文件的文件夹名。**默认值：** `media` |
 | `CHECK_EDIT_LIMIT`      | `40`                                | **【可选】** 增量同步时检查最近帖子的数量，默认为 `40`。 |
 
-#### 第 3 步：启用并运行 Action
+#### 第 3 步：配置远程仓库（可选）
+
+如果您希望将备份同步到独立的远程仓库，请按以下步骤操作：
+
+##### 3.1 创建新的远程仓库
+
+1. 登录您的 GitHub 账号
+2. 点击右上角的 **"+"** 按钮，选择 **"New repository"**
+3. 填写仓库信息：
+   - **Repository name:** 建议使用 `mastodon-backup` 或您喜欢的名称
+   - **Description:** 可选，例如 "Mastodon 帖子自动备份"
+   - **Public/Private:** 根据您的需求选择
+4. 点击 **"Create repository"** 按钮
+
+##### 3.2 生成 Personal Access Token (PAT)
+
+1. 在 GitHub 页面右上角点击您的头像，选择 **"Settings"**
+2. 在左侧菜单中找到并点击 **"Developer settings"**
+3. 点击 **"Personal access tokens"** → **"Tokens (classic)"**
+4. 点击 **"Generate new token"** → **"Generate new token (classic)"**
+5. 配置 token 权限：
+   - **Note:** 填写描述，例如 "Mastodon Backup Sync"
+   - **Expiration:** 选择合适的过期时间
+   - **Scopes:** 勾选以下权限：
+     - ✅ **`repo`** - 完整的仓库访问权限
+     - ✅ **`workflow`** - 工作流权限（可选）
+6. 滚动到页面底部，点击 **"Generate token"** 按钮
+7. **⚠️ 重要：** 请立即复制生成的 token（格式如 `ghp_xxx...`），因为页面刷新后您将无法再次看到它！
+
+##### 3.3 配置 GitHub Secrets
+
+在您 Fork 的仓库页面，点击 **"Settings"** → **"Secrets and variables"** → **"Actions"**。
+
+点击 **"New repository secret"** 按钮，依次创建下表中的 Secret：
+
+| Secret 名称             | 示例值                              | 描述                                     |
+| ----------------------- | ----------------------------------- | ---------------------------------------- |
+| `MASTODON_INSTANCE_URL` | `https://mastodon.social`           | **【必需】** 您的 Mastodon 实例地址。       |
+| `MASTODON_USER_ID`      | `123456789012345678`                | **【必需】** 您的用户 ID。          |
+| `MASTODON_ACCESS_TOKEN` | `Abc123xyz...`                      | **【必需】** 您的访问令牌。         |
+| `ARCHIVE_FILENAME`      | `archive.md`                        | **【可选】** 根目录下汇总文件的名称。**默认值：** `archive.md` |
+| `POSTS_FOLDER`          | `mastodon`                          | **【可选】** 存放单条嘟文的文件夹名。**默认值：** `mastodon` |
+| `MEDIA_FOLDER`          | `media`                             | **【可选】** 存放媒体文件的文件夹名。**默认值：** `media` |
+| `CHECK_EDIT_LIMIT`      | `40`                                | **【可选】** 增量同步时检查最近帖子的数量，默认为 `40`。 |
+| `ENABLE_PUSH_TO_DATA_REPO` | `true`                              | **【可选】** 启用远程仓库同步，**默认值：** `false` |
+| `TARGET_REPO_USERNAME`  | `your-username`                     | **【可选】** 目标仓库的用户名 |
+| `TARGET_REPO_NAME`      | `your-backup-repo`                  | **【可选】** 目标仓库名称 |
+| `TARGET_REPO_PAT`       | `ghp_xxx...`                        | **【可选】** 目标仓库的 Personal Access Token |
+
+#### 第 4 步：启用并运行 Action
 
 1.  在您的仓库页面，点击顶部的 **"Actions"** 标签页。
 2.  如果看到提示，请点击 **"I understand my workflows, go ahead and enable them"** 按钮。
@@ -119,9 +174,7 @@ python main.py
 python main.py --full-sync
 ```
 
-### 高级用法
-
-### 清理已删除的帖子
+### 🗑️ 清理已删除的帖子
 
 如果您在 Mastodon 上删除了某些帖子，并希望在您的备份中也移除它们，可以运行清理模式。
 
@@ -147,6 +200,53 @@ python main.py --cleanup
 
 重要提示：清理模式不会自动更新您的汇总文件 (`archive.md`)。在执行清理后，您需要运行一次强制全量同步来重新生成一个干净的汇总文件。
 
+## 📊 活动总结报告
+
+工具会自动生成一份活动总结报告，包含以下内容：
+
+### 年度发帖统计
+- 显示当前年度的发帖总数
+- 直观的发帖活跃度概览
+
+### 热力图可视化
+- 基于 GitHub 贡献图风格的热力图
+- 按日期显示发帖频率
+- 不同颜色代表不同的发帖数量
+- 鼠标悬停可查看具体日期的发帖数量
+
+### 报告位置
+- 默认生成在仓库根目录的 `README.md` 文件中
+- 包含截至当前日期的活动概览
+- 提供热力图的 Markdown 嵌入显示
+
+## 🔄 同步模式说明
+
+### 全量同步模式
+**触发条件：**
+- 首次运行
+- 手动勾选"强制全量同步"
+- 同步状态文件损坏
+
+**执行操作：**
+- 清理所有旧的备份文件
+- 重新下载所有帖子
+- 重新生成所有备份文件
+- 重新生成活动总结报告
+
+### 增量同步模式
+**触发条件：**
+- 非首次运行
+- 未勾选"强制全量同步"
+- 同步状态文件正常
+
+**执行操作：**
+- 只下载新的帖子
+- 只更新已编辑的帖子
+- 保持现有备份文件不变
+- 更新活动总结报告（如有新内容）
+
+
+
 ## 🤝 贡献指南
 
 欢迎为 Mastodon Vault Sync 项目贡献您的力量！无论是报告问题、提出建议还是提交代码，您的贡献都非常宝贵。
@@ -155,83 +255,83 @@ python main.py --cleanup
 
 如果您在使用过程中遇到任何问题，请通过以下方式报告：
 
-1. 访问项目的 [Issues 页面](https://github.com/Eyozy/mastodon-vault-sync/issues)
-2. 点击 "New Issue" 按钮
-3. 详细描述您遇到的问题，包括：
-   - 问题的具体表现
-   - 重现步骤
-   - 期望的行为
-   - 实际发生的行为
-   - 相关的环境信息（操作系统、Python 版本等）
+1.  访问项目的 [Issues 页面](https://github.com/Eyozy/mastodon-vault-sync/issues)
+2.  点击 "New Issue" 按钮
+3.  详细描述您遇到的问题，包括：
+    - 问题的具体表现
+    - 重现步骤
+    - 期望的行为
+    - 实际发生的行为
+    - 相关的环境信息（操作系统、Python 版本等）
 
 ### 💡 功能建议
 
 如果您有新的功能想法或改进建议，欢迎：
 
-1. 在 Issues 页面创建新的功能请求
-2. 详细描述您的建议
-3. 解释为什么这个功能对项目有价值
-4. 如果可能，提供实现方案或伪代码
+1.  在 Issues 页面创建新的功能请求
+2.  详细描述您的建议
+3.  解释为什么这个功能对项目有价值
+4.  如果可能，提供实现方案或伪代码
 
 ### 🛠️ 代码贡献
 
 #### 开发环境设置
 
-1. **Fork 仓库**
-   - 点击 GitHub 页面右上角的 "Fork" 按钮
-   - 将仓库复制到您的 GitHub 账号下
+1.  **Fork 仓库**
+    - 点击 GitHub 页面右上角的 "Fork" 按钮
+    - 将仓库复制到您的 GitHub 账号下
 
-2. **克隆到本地**
-   ```bash
-   git clone https://github.com/您的用户名/mastodon-vault-sync.git
-   cd mastodon-vault-sync
-   ```
+2.  **克隆到本地**
+    ```bash
+    git clone https://github.com/您的用户名/mastodon-vault-sync.git
+    cd mastodon-vault-sync
+    ```
 
-3. **设置上游仓库**
-   ```bash
-   git remote add upstream https://github.com/Eyozy/mastodon-vault-sync.git
-   ```
+3.  **设置上游仓库**
+    ```bash
+    git remote add upstream https://github.com/Eyozy/mastodon-vault-sync.git
+    ```
 
-4. **创建虚拟环境（推荐）**
-   ```bash
-   python -m venv venv
-   source venv/bin/activate  # Linux/Mac
-   # 或
-   venv\Scripts\activate     # Windows
-   ```
+4.  **创建虚拟环境（推荐）**
+    ```bash
+    python -m venv venv
+    source venv/bin/activate  # Linux/Mac
+    # 或
+    venv\Scripts\activate     # Windows
+    ```
 
-5. **安装依赖**
-   ```bash
-   pip install -r requirements.txt
-   ```
+5.  **安装依赖**
+    ```bash
+    pip install -r requirements.txt
+    ```
 
 #### 开发流程
 
-1. **创建功能分支**
-   ```bash
-   git checkout -b feature/您的功能名称
-   ```
+1.  **创建功能分支**
+    ```bash
+    git checkout -b feature/您的功能名称
+    ```
 
-2. **进行开发**
-   - 编写代码
-   - 添加必要的测试
-   - 更新相关文档
+2.  **进行开发**
+    - 编写代码
+    - 添加必要的测试
+    - 更新相关文档
 
-3. **提交更改**
-   ```bash
-   git add .
-   git commit -m '添加：描述您的更改'
-   ```
+3.  **提交更改**
+    ```bash
+    git add .
+    git commit -m '添加：描述您的更改'
+    ```
 
-4. **推送分支**
-   ```bash
-   git push origin feature/您的功能名称
-   ```
+4.  **推送分支**
+    ```bash
+    git push origin feature/您的功能名称
+    ```
 
-5. **创建 Pull Request**
-   - 访问您的 GitHub 仓库页面
-   - 点击 "New Pull Request"
-   - 填写 PR 描述，说明您的更改内容和原因
+5.  **创建 Pull Request**
+    - 访问您的 GitHub 仓库页面
+    - 点击 "New Pull Request"
+    - 填写 PR 描述，说明您的更改内容和原因
 
 #### 代码规范
 
