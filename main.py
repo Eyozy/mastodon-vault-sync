@@ -289,6 +289,103 @@ def generate_activity_summary(config, backup_path):
     summary_filepath.write_text(final_md, encoding='utf-8')
     logging.info(f"✅ 活动总结报告已成功更新至 '{summary_filepath.name}'。")
 
+def safe_remove_directory(path):
+    """
+    安全删除目录，处理权限问题和文件锁定
+    """
+    if not path.exists():
+        return True
+    
+    try:
+        # 首先尝试正常删除
+        shutil.rmtree(path)
+        return True
+    except PermissionError as e:
+        logging.warning(f"⚠️ 权限错误，尝试强制删除目录 {path}: {e}")
+        
+        # 尝试移除只读属性
+        try:
+            for root, dirs, files in os.walk(path):
+                for file in files:
+                    file_path = os.path.join(root, file)
+                    try:
+                        os.chmod(file_path, 0o777)
+                    except (OSError, PermissionError):
+                        pass
+                for dir in dirs:
+                    dir_path = os.path.join(root, dir)
+                    try:
+                        os.chmod(dir_path, 0o777)
+                    except (OSError, PermissionError):
+                        pass
+        except Exception as e:
+            logging.warning(f"⚠️ 移除只读属性失败：{e}")
+        
+        # 再次尝试删除
+        try:
+            shutil.rmtree(path)
+            return True
+        except PermissionError:
+            # 如果还是失败，尝试逐个删除文件
+            try:
+                import stat
+                def remove_readonly(func, path, excinfo):
+                    os.chmod(path, stat.S_IWRITE)
+                    func(path)
+                
+                shutil.rmtree(path, onerror=remove_readonly)
+                return True
+            except Exception as e:
+                logging.error(f"❌ 无法删除目录 {path}: {e}")
+                return False
+    except Exception as e:
+        logging.error(f"❌ 删除目录 {path} 时发生未知错误：{e}")
+        return False
+
+def safe_remove_file(path):
+    """
+    安全删除文件，处理权限问题
+    """
+    if not path.exists():
+        return True
+    
+    try:
+        path.unlink()
+        return True
+    except PermissionError as e:
+        logging.warning(f"⚠️ 权限错误，尝试强制删除文件 {path}: {e}")
+        try:
+            # 尝试移除只读属性
+            os.chmod(path, 0o777)
+            path.unlink()
+            return True
+        except Exception as e:
+            logging.error(f"❌ 无法删除文件 {path}: {e}")
+            return False
+    except Exception as e:
+        logging.error(f"❌ 删除文件 {path} 时发生未知错误：{e}")
+        return False
+
+def should_update_summary(is_full_sync, new_posts_count, backup_path, backup_config):
+    """
+    判断是否需要更新活动总结
+    """
+    summary_filepath = backup_path / backup_config["summary_filename"]
+    
+    # 全量同步时总是更新
+    if is_full_sync:
+        return True
+    
+    # 首次运行时更新
+    if not summary_filepath.exists():
+        return True
+    
+    # 有新帖子时更新
+    if new_posts_count > 0:
+        return True
+    
+    return False
+
 def main():
     logging.info("========================================")
     logging.info(" Mastodon Sync 开始运行")
@@ -319,11 +416,24 @@ def main():
 
     if is_full_sync:
         logging.warning("⚠️  检测到全量同步模式，将清理目标路径下的旧备份文件...")
+        
         # 状态文件在项目目录，也要清理
-        if state_file_path.exists(): state_file_path.unlink()
-        if archive_file_path.exists(): archive_file_path.unlink()
-        if posts_folder_path.exists(): shutil.rmtree(posts_folder_path)
-        if media_folder_path.exists(): shutil.rmtree(media_folder_path)
+        if not safe_remove_file(state_file_path):
+            logging.error("❌ 无法删除状态文件，但继续执行...")
+        
+        if not safe_remove_file(archive_file_path):
+            logging.error("❌ 无法删除归档文件，但继续执行...")
+        
+        if not safe_remove_directory(posts_folder_path):
+            logging.error("❌ 无法删除帖子文件夹，请手动检查是否有程序占用该文件夹")
+            logging.error("❌ 建议：关闭可能占用文件夹的程序（如文件浏览器、OneDrive 同步等）后重试")
+            # 选择性退出，因为无法删除文件夹可能会导致后续操作失败
+            if posts_folder_path.exists():
+                logging.error("❌ 由于无法清理旧文件，为了安全起见，程序将退出")
+                sys.exit(1)
+        
+        if not safe_remove_directory(media_folder_path):
+            logging.error("❌ 无法删除媒体文件夹，但继续执行...")
     
     last_synced_id = None
     if not is_full_sync and state_file_path.exists():
@@ -337,6 +447,7 @@ def main():
     if is_full_sync:
         posts_to_process = fetch_mastodon_posts(config)
         all_posts_from_server_for_sync = posts_to_process
+        new_posts_count = len(posts_to_process)
     else:
         new_posts = fetch_mastodon_posts(config, since_id=last_synced_id)
         num_pages = (backup_config["check_edit_limit"] + 39) // 40
@@ -345,6 +456,7 @@ def main():
         posts_dict = {p['id']: p for p in new_posts}
         for p in recent_posts: posts_dict[p['id']] = p
         posts_to_process = sorted(list(posts_dict.values()), key=lambda p: p['created_at'])
+        new_posts_count = len(new_posts)
 
     if posts_to_process:
         save_posts(posts_to_process, config, all_posts_from_server_for_sync, backup_path)
@@ -355,18 +467,15 @@ def main():
     else:
         logging.info("✨ 没有新内容需要同步。")
         
-    # 无论是否有新内容，只要在全量同步模式或首次运行，就生成活动总结
-    if is_full_sync or not archive_file_path.exists():
-        logging.info("🔄 全量同步模式或首次运行，生成活动总结...")
+    # 统一的活动总结更新逻辑：智能同步和全量同步都会更新统计
+    if should_update_summary(is_full_sync, new_posts_count, backup_path, backup_config):
+        if is_full_sync:
+            logging.info("🔄 全量同步模式，生成活动总结...")
+        else:
+            logging.info("📊 检测到新内容，更新活动总结...")
         generate_activity_summary(config, backup_path)
     else:
-        # 检查是否需要更新活动总结（例如日期变化）
-        summary_filepath = backup_path / backup_config["summary_filename"]
-        if not summary_filepath.exists():
-            logging.info("📊 活动总结文件不存在，生成新的...")
-            generate_activity_summary(config, backup_path)
-        else:
-            logging.info("📊 活动总结已存在，跳过生成。")
+        logging.info("📊 没有新内容需要更新，跳过活动总结生成。")
     logging.info("========================================")
     logging.info(" ✅ 同步完成！")
     logging.info("========================================")
