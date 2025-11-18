@@ -88,7 +88,6 @@ mastodon-sync/
 | `ARCHIVE_FILENAME`      | `archive.md`                        | **【可选】** 根目录下汇总文件的名称。**默认值：** `archive.md` |
 | `POSTS_FOLDER`          | `mastodon`                          | **【可选】** 存放单条嘟文的文件夹名。**默认值：** `mastodon` |
 | `MEDIA_FOLDER`          | `media`                             | **【可选】** 存放媒体文件的文件夹名。**默认值：** `media` |
-| `CHECK_EDIT_LIMIT`      | `40`                                | **【可选】** 增量同步时检查最近帖子的数量，默认为 `40`。 |
 
 #### 第 3 步：配置远程仓库（可选）
 
@@ -133,7 +132,6 @@ mastodon-sync/
 | `ARCHIVE_FILENAME`      | `archive.md`                        | **【可选】** 根目录下汇总文件的名称。**默认值：** `archive.md` |
 | `POSTS_FOLDER`          | `mastodon`                          | **【可选】** 存放单条嘟文的文件夹名。**默认值：** `mastodon` |
 | `MEDIA_FOLDER`          | `media`                             | **【可选】** 存放媒体文件的文件夹名。**默认值：** `media` |
-| `CHECK_EDIT_LIMIT`      | `40`                                | **【可选】** 增量同步时检查最近帖子的数量，默认为 `40`。 |
 | `ENABLE_PUSH_TO_DATA_REPO` | `true`                              | **【可选】** 启用远程仓库同步，**默认值：** `false` |
 | `TARGET_REPO_USERNAME`  | `your-username`                     | **【可选】** 目标仓库的用户名 |
 | `TARGET_REPO_NAME`      | `your-backup-repo`                  | **【可选】** 目标仓库名称 |

@@ -2,6 +2,7 @@
 import os
 import sys
 import json
+import time
 import logging
 import re
 import shutil
@@ -42,8 +43,7 @@ def get_config():
                 "posts_folder": os.environ.get("POSTS_FOLDER") or "mastodon",
                 "media_folder": os.environ.get("MEDIA_FOLDER") or "media",
                 "summary_filename": os.environ.get("SUMMARY_FILENAME") or "README.md",
-                "check_edit_limit": int(os.environ.get("CHECK_EDIT_LIMIT") or 40),
-            },
+              },
             "sync": {"state_file": "sync_state.json"}
         }
 
@@ -60,7 +60,6 @@ def get_config():
         backup_conf.setdefault("filename", "archive.md")
         backup_conf.setdefault("media_folder", "media")
         backup_conf.setdefault("summary_filename", "README.md")
-        backup_conf.setdefault("check_edit_limit", 40)
         return config
     except FileNotFoundError:
         logging.error("❌ 错误：找不到 config.yaml 文件。程序无法运行。")
@@ -69,7 +68,32 @@ def get_config():
         logging.error(f"❌ 错误：配置文件格式错误：{e}")
         sys.exit(1)
 
-def fetch_mastodon_posts(config, since_id=None, page_limit=None):
+def parse_rate_limit_reset(reset_header):
+    """解析 Mastodon API 的 X-RateLimit-Reset 时间戳"""
+    try:
+        # 尝试解析为 Unix 时间戳（秒数）
+        return int(reset_header)
+    except ValueError:
+        pass  # 继续尝试其他格式
+
+    try:
+        # 尝试解析为 ISO 格式时间戳
+        if 'T' in reset_header:
+            # 移除微秒部分，避免解析问题
+            clean_time = reset_header.split('.')[0] + ('Z' if reset_header.endswith('Z') else '')
+            if reset_header.endswith('Z'):
+                reset_time = datetime.strptime(clean_time, "%Y-%m-%dT%H:%M:%SZ")
+                reset_time = reset_time.replace(tzinfo=timezone.utc)
+            else:
+                reset_time = datetime.fromisoformat(clean_time)
+            return int(reset_time.timestamp())
+    except (ValueError, AttributeError):
+        pass
+
+    # 如果都失败了，返回 None，使用默认值
+    return None
+
+def fetch_mastodon_posts(config, since_id=None, page_limit=None, max_posts=None):
     mastodon_config = config["mastodon"]
     instance_url, user_id, access_token = mastodon_config["instance_url"], mastodon_config["user_id"], mastodon_config["access_token"]
     api_url = f"{instance_url}/api/v1/accounts/{user_id}/statuses"
@@ -77,23 +101,93 @@ def fetch_mastodon_posts(config, since_id=None, page_limit=None):
     params = {"limit": 40, "exclude_replies": False, "exclude_reblogs": True}
     if since_id: params["since_id"] = since_id
     all_posts, page_count = [], 1
+    requests_in_window = 0
+    window_start_time = time.time()
+
     while api_url:
         try:
-            logging.info(f"📄 正在获取第 {page_count} 页...")
+            # 智能速率限制管理
+            current_time = time.time()
+            if current_time - window_start_time >= 300:  # 5 分钟窗口
+                requests_in_window = 0
+                window_start_time = current_time
+                logging.info("🔄 重置 API 调用计数器（5 分钟窗口）")
+
+            # 检查速率限制
+            if requests_in_window >= 280:  # 留 20 次缓冲
+                wait_time = 300 - (current_time - window_start_time)
+                if wait_time > 0:
+                    logging.info(f"⏱️ 接近 API 限制，等待 {wait_time:.1f} 秒...")
+                    # 实时倒计时显示
+                    total_wait = int(wait_time)
+                    for remaining in range(total_wait, 0, -1):
+                        progress = "█" * ((total_wait - remaining) * 20 // total_wait)
+                        empty = "░" * (20 - len(progress))
+                        # 使用 \r 回到行首，实现倒计时效果
+                        print(f"\r⏳ 等待重置：[{progress}{empty}] {remaining:3d}s ({(total_wait-remaining)*100//total_wait}%)  ", end="", flush=True)
+                        time.sleep(1)
+                    print()  # 换行
+                    logging.info("✅ API 限制已重置，继续获取帖子...")
+                    requests_in_window = 0
+                    window_start_time = time.time()
+
+            # 每获取 100 页显示一次进度报告
+            if page_count % 100 == 0 or page_count % 25 == 1:
+                logging.info(f"📊 进度报告：已获取 {len(all_posts)} 条帖子，共 {page_count} 页")
+            logging.info(f"📄 正在获取第 {page_count} 页...（当前窗口已调用 {requests_in_window}/300 次）")
             response = requests.get(api_url, headers=headers, params=params)
             response.raise_for_status()
+
+            # 检查 API 返回的速率限制头
+            rate_limit_remaining = int(response.headers.get('X-RateLimit-Remaining', 0))
+
+            # 解析 X-RateLimit-Reset 时间戳
+            reset_header = response.headers.get('X-RateLimit-Reset', '0')
+            rate_limit_reset = parse_rate_limit_reset(reset_header)
+
+            # 如果解析失败，使用默认值（当前时间 + 5 分钟）
+            if rate_limit_reset is None:
+                rate_limit_reset = int(time.time()) + 300
+                logging.warning(f"⚠️ 无法解析 API 重置时间格式：{reset_header}，使用默认 5 分钟重置")
+
             posts = response.json()
             if not posts: break
             all_posts.extend(posts)
+            requests_in_window += 1
+
+            # 检查是否达到限制
             if page_limit and page_count >= page_limit: break
+            if max_posts and len(all_posts) >= max_posts:
+                all_posts = all_posts[:max_posts]
+                break
+
+            # 如果剩余调用次数很少，等待重置
+            if rate_limit_remaining < 10:
+                reset_wait = max(0, rate_limit_reset - current_time)
+                if reset_wait > 0 and reset_wait < 300:  # 不超过 5 分钟
+                    logging.info(f"⏱️ API 调用即将用完，等待 {reset_wait:.1f} 秒重置...")
+                    # 实时倒计时显示
+                    total_wait = int(reset_wait)
+                    for remaining in range(total_wait, 0, -1):
+                        progress = "█" * ((total_wait - remaining) * 20 // total_wait)
+                        empty = "░" * (20 - len(progress))
+                        print(f"\r⏳ API 重置：[{progress}{empty}] {remaining:3d}s ({(total_wait-remaining)*100//total_wait}%)  ", end="", flush=True)
+                        time.sleep(1)
+                    print()  # 换行
+                    logging.info("✅ API 限制已重置，继续获取帖子...")
+                    requests_in_window = 0
+
             links = requests.utils.parse_header_links(response.headers.get('Link', ''))
             api_url = next((link['url'] for link in links if link.get('rel') == 'next'), None)
             params.pop('since_id', None)
             page_count += 1
+
         except requests.exceptions.RequestException as e:
             logging.error(f"❌ API 请求失败：{e}")
             return []
+
     all_posts.reverse()
+    logging.info(f"✅ 成功获取 {len(all_posts)} 条帖子，共调用 {page_count-1} 次 API")
     return all_posts
 
 def download_media(media_item, media_folder_path):
@@ -163,11 +257,8 @@ def update_archive_file(posts_to_update, config, all_posts_from_server, backup_p
                 existing_posts_by_id[match.group(1)] = block
     for post in posts_to_update:
         existing_posts_by_id[post['id']] = format_single_post_for_archive(post, media_folder_name, config["media_file_map"]).strip()
-    if not config.get("is_full_sync", False):
-        deleted_ids = set(existing_posts_by_id.keys()) - {p['id'] for p in all_posts_from_server}
-        if deleted_ids:
-            logging.info(f"🗑️ 检测到 {len(deleted_ids)} 条已删除的帖子，将从归档中移除。")
-            for post_id in deleted_ids: del existing_posts_by_id[post_id]
+    # 编辑检测范围：最近 200 条帖子（约 1-2 周的内容）
+    logging.info("📝 编辑检测范围：最近 200 条帖子，覆盖约 1-2 周内的编辑更新")
     rebuilt_posts_by_day = defaultdict(list)
     all_posts_dict = {p['id']: p for p in all_posts_from_server}
     for post_id, content in existing_posts_by_id.items():
@@ -410,12 +501,16 @@ def main():
 
     is_cli_full_sync = "--full-sync" in sys.argv
     is_action_full_sync = os.environ.get("FORCE_FULL_SYNC") == "true"
-    is_automatic_full_sync = not archive_file_path.exists()
-    is_full_sync = is_cli_full_sync or is_action_full_sync or is_automatic_full_sync
+    is_first_run = not archive_file_path.exists()
+    is_manual_full_sync = is_cli_full_sync or is_action_full_sync
+    is_full_sync = is_manual_full_sync or is_first_run
     config["is_full_sync"] = is_full_sync
 
     if is_full_sync:
-        logging.warning("⚠️  检测到全量同步模式，将清理目标路径下的旧备份文件...")
+        if is_first_run:
+            logging.info("🆕 检测到首次运行，将开始初始化备份...")
+        else:
+            logging.warning("⚠️  检测到全量同步模式，将清理目标路径下的旧备份文件...")
         
         # 状态文件在项目目录，也要清理
         if not safe_remove_file(state_file_path):
@@ -445,13 +540,18 @@ def main():
             config["is_full_sync"] = True
 
     if is_full_sync:
+        # 智能全量同步：充分利用 API 限制获取所有帖子
+        # 无页数限制，通过智能速率管理安全获取所有历史帖子
+        logging.info("🔄 智能全量同步模式，将获取所有历史帖子...")
+        logging.info("⚡ 系统将智能管理 API 速率限制，可能需要一些时间完成")
         posts_to_process = fetch_mastodon_posts(config)
         all_posts_from_server_for_sync = posts_to_process
         new_posts_count = len(posts_to_process)
+        logging.info(f"📊 全量同步完成，共获取 {new_posts_count} 条历史帖子")
     else:
         new_posts = fetch_mastodon_posts(config, since_id=last_synced_id)
-        num_pages = (backup_config["check_edit_limit"] + 39) // 40
-        recent_posts = fetch_mastodon_posts(config, page_limit=num_pages)
+        # 获取更多帖子用于编辑检测（5 页，200 条帖子），覆盖过去 1-2 周的编辑
+        recent_posts = fetch_mastodon_posts(config, page_limit=5)
         all_posts_from_server_for_sync = recent_posts
         posts_dict = {p['id']: p for p in new_posts}
         for p in recent_posts: posts_dict[p['id']] = p
