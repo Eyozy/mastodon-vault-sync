@@ -10,9 +10,9 @@ on:
         type: boolean
         default: false
         
-  # 按计划运行（每 3 小时一次）
+  # 按计划运行（每小时一次）
   schedule:
-    - cron: '0 */3 * * *'
+    - cron: '0 * * * *'
 
 jobs:
   sync-and-deploy:
