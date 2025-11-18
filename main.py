@@ -13,7 +13,14 @@ from urllib.parse import urlparse
 
 import requests
 import yaml
+import base64
 from markdownify import markdownify as md
+import template  # HTML 模板模块
+
+# --- API 请求配置常量 ---
+POSTS_PER_REQUEST = 40      # 每次请求的最大帖子数量 (Mastodon API 限制)
+RATE_LIMIT_THRESHOLD = 10   # 速率限制安全阈值，低于此值时触发等待
+DEFAULT_WAIT_TIME = 300     # 默认等待时间（秒），当无法解析速率限制重置时间时使用
 
 # --- 配置日志记录 ---
 logging.basicConfig(
@@ -23,6 +30,109 @@ logging.basicConfig(
 )
 
 # --- 辅助函数 ---
+
+def load_css_styles():
+    """
+    从外部文件加载 CSS 样式
+    """
+    try:
+        # 尝试从本地文件读取
+        css_file = Path("styles/mastodon.css")
+        if css_file.exists():
+            with open(css_file, "r", encoding="utf-8") as f:
+                return f.read()
+        else:
+            logging.warning("CSS 文件不存在，使用默认样式")
+            return get_default_css()
+    except Exception as e:
+        logging.error(f"读取 CSS 文件失败：{e}，使用默认样式")
+        return get_default_css()
+
+def get_default_css():
+    """
+    返回默认的内联 CSS（作为后备）
+    """
+    return """
+    /* 基础样式后备方案 */
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    .container { max-width: 600px; margin: 0 auto; }
+    .status { background: white; padding: 1rem; margin-bottom: 1rem; border-radius: 8px; }
+    """
+
+def validate_post_data(post_data):
+    """
+    验证帖子数据的安全性
+    """
+    try:
+        # 验证必需字段
+        required_fields = ["id", "content", "created_at", "account"]
+        for field in required_fields:
+            if field not in post_data:
+                raise ValueError(f"帖子数据缺少必需字段：{field}")
+
+        # 验证 ID 格式（应该是数字字符串）
+        try:
+            int(post_data["id"])
+        except (ValueError, TypeError):
+            raise ValueError("帖子 ID 格式无效")
+
+        # 验证内容长度，防止过长的内容
+        if len(str(post_data["content"])) > 100000:  # 100KB 限制
+            raise ValueError("帖子内容过长，可能存在安全隐患")
+
+        # 验证创建时间格式
+        if not isinstance(post_data["created_at"], str):
+            raise ValueError("创建时间格式无效")
+
+        # 验证账户信息
+        if "account" in post_data and post_data["account"]:
+            account = post_data["account"]
+            if "display_name" in account and len(str(account["display_name"])) > 1000:
+                raise ValueError("用户显示名称过长")
+
+        return True
+
+    except Exception as e:
+        logging.warning(f"帖子数据验证失败：{e}")
+        return False
+
+def validate_config(config):
+    """
+    验证配置的安全性和完整性
+    """
+    try:
+        # 验证 Mastodon 配置
+        mastodon_config = config["mastodon"]
+
+        # 检查必需字段
+        required_fields = ["instance_url", "user_id", "access_token"]
+        for field in required_fields:
+            if not mastodon_config.get(field):
+                raise ValueError(f"配置错误：缺少必需的 Mastodon 配置字段：{field}")
+
+        # 验证 URL 格式
+        instance_url = mastodon_config["instance_url"]
+        if not instance_url.startswith(("http://", "https://")):
+            raise ValueError("配置错误：instance_url 必须以 http:// 或 https:// 开头")
+
+        # 验证 user_id 是否为数字
+        try:
+            int(mastodon_config["user_id"])
+        except ValueError:
+            raise ValueError("配置错误：user_id 必须是数字")
+
+        # 验证 access_token 长度
+        if len(mastodon_config["access_token"]) < 10:
+            raise ValueError("配置错误：access_token 长度不足")
+
+        logging.info("✔ 配置验证通过")
+        return True
+
+    except KeyError as e:
+        raise ValueError(f"配置错误：缺少配置项 {e}")
+    except Exception as e:
+        logging.error(f"❌ 配置验证失败：{e}")
+        raise
 
 def get_config():
     """
@@ -43,8 +153,11 @@ def get_config():
                 "posts_folder": os.environ.get("POSTS_FOLDER") or "mastodon",
                 "media_folder": os.environ.get("MEDIA_FOLDER") or "media",
                 "summary_filename": os.environ.get("SUMMARY_FILENAME") or "README.md",
-              },
-            "sync": {"state_file": "sync_state.json"}
+                "html_filename": os.environ.get("HTML_FILENAME") or "index.html",
+            },
+            "sync": {
+                "state_file": "sync_state.json"
+            }
         }
 
     # 如果是本地运行，则从 config.yaml 加载
@@ -98,7 +211,7 @@ def fetch_mastodon_posts(config, since_id=None, page_limit=None, max_posts=None)
     instance_url, user_id, access_token = mastodon_config["instance_url"], mastodon_config["user_id"], mastodon_config["access_token"]
     api_url = f"{instance_url}/api/v1/accounts/{user_id}/statuses"
     headers = {"Authorization": f"Bearer {access_token}"}
-    params = {"limit": 40, "exclude_replies": False, "exclude_reblogs": True}
+    params = {"limit": POSTS_PER_REQUEST, "exclude_replies": False, "exclude_reblogs": True}
     if since_id: params["since_id"] = since_id
     all_posts, page_count = [], 1
     requests_in_window = 0
@@ -145,10 +258,10 @@ def fetch_mastodon_posts(config, since_id=None, page_limit=None, max_posts=None)
             reset_header = response.headers.get('X-RateLimit-Reset', '0')
             rate_limit_reset = parse_rate_limit_reset(reset_header)
 
-            # 如果解析失败，使用默认值（当前时间 + 5 分钟）
+            # 如果解析失败，使用默认值（当前时间 + 默认等待时间）
             if rate_limit_reset is None:
-                rate_limit_reset = int(time.time()) + 300
-                logging.warning(f"⚠️ 无法解析 API 重置时间格式：{reset_header}，使用默认 5 分钟重置")
+                rate_limit_reset = int(time.time()) + DEFAULT_WAIT_TIME
+                logging.warning(f"⚠️ 无法解析 API 重置时间格式：{reset_header}，使用默认等待时间")
 
             posts = response.json()
             if not posts: break
@@ -162,7 +275,7 @@ def fetch_mastodon_posts(config, since_id=None, page_limit=None, max_posts=None)
                 break
 
             # 如果剩余调用次数很少，等待重置
-            if rate_limit_remaining < 10:
+            if rate_limit_remaining < RATE_LIMIT_THRESHOLD:
                 reset_wait = max(0, rate_limit_reset - current_time)
                 if reset_wait > 0 and reset_wait < 300:  # 不超过 5 分钟
                     logging.info(f"⏱️ API 调用即将用完，等待 {reset_wait:.1f} 秒重置...")
@@ -380,6 +493,176 @@ def generate_activity_summary(config, backup_path):
     summary_filepath.write_text(final_md, encoding='utf-8')
     logging.info(f"✅ 活动总结报告已成功更新至 '{summary_filepath.name}'。")
 
+def generate_mastodon_html(posts, config, backup_path):
+    """生成单文件 HTML 网页，复刻 Mastodon 界面"""
+    backup_config = config["backup"]
+    html_filename = backup_config.get("html_filename", "index.html")
+    html_filepath = backup_path / html_filename
+    media_folder = backup_config["media_folder"]
+
+    logging.info("正在生成 Mastodon HTML 网页...")
+
+    # 提取用户信息
+    if posts:
+        user = posts[0]["account"]
+        username = user["username"]
+        display_name = user.get("display_name", username)
+        avatar = user["avatar"]
+        user_id = user["id"]
+        # 从 URL 中提取实例名称
+        user_url = user["url"]
+        instance_name = user_url.split("//")[1].split("/")[0] if "//" in user_url else ""
+        # 获取用户背景图片
+        header = user.get("header", "")
+        if header:
+            header_filename = f"header-{user_id}.jpg"
+            local_header_path = f"{media_folder}/{header_filename}"
+
+            # 下载背景图片
+            try:
+                header_response = requests.get(header, stream=True)
+                if header_response.status_code == 200:
+                    header_path = backup_path / media_folder / header_filename
+                    header_path.parent.mkdir(exist_ok=True)
+                    with open(header_path, 'wb') as f:
+                        for chunk in header_response.iter_content(1024):
+                            f.write(chunk)
+                    background_image = local_header_path
+                else:
+                    background_image = ""
+            except Exception as e:
+                logging.warning(f"下载背景图片失败：{e}")
+                background_image = ""
+        else:
+            background_image = ""
+    else:
+        username = "unknown"
+        display_name = "Unknown User"
+        avatar = ""
+        user_id = "unknown"
+        instance_name = ""
+        background_image = ""
+
+    # 提取统计数据
+    total_posts = len(posts)
+    followers_count = posts[0]["account"]["followers_count"] if posts else 0
+    following_count = posts[0]["account"]["following_count"] if posts else 0
+
+    # 转换帖子数据为 JSON
+    posts_data = []
+    for post in posts:
+        # 验证帖子数据安全性
+        if not validate_post_data(post):
+            logging.warning(f"跳过无效的帖子数据，ID: {post.get('id', 'unknown')}")
+            continue
+        # 处理媒体附件
+        media_items = []
+        for media in post.get("media_attachments", []):
+            media_filename = f"{media['id']}-{Path(urlparse(media['url']).path).name}"
+            media_items.append({
+                "id": media["id"],
+                "type": media["type"],
+                "url": f"{media_folder}/{media_filename}",
+                "description": media.get("description", ""),
+                "preview_url": media.get("preview_url", "")
+            })
+
+        # 处理内容 HTML 和表情符号
+        content_html = post.get("content", "")
+
+        # 处理 Mastodon 表情符号 - 转换为 base64 嵌入
+        emojis = post.get("emojis", [])
+        for emoji in emojis:
+            shortcode = emoji.get("shortcode", "")
+            url = emoji.get("url", "")
+            static_url = emoji.get("static_url", url)
+            if shortcode and static_url:
+                # 下载 emoji 图片并转换为 base64
+                try:
+                    emoji_response = requests.get(static_url, timeout=10)
+                    if emoji_response.status_code == 200:
+                        emoji_base64 = base64.b64encode(emoji_response.content).decode('utf-8')
+                        # 检测图片类型
+                        content_type = emoji_response.headers.get('Content-Type', 'image/png')
+                        # 生成 data URI
+                        data_uri = f"data:{content_type};base64,{emoji_base64}"
+                        # 替换 emoji
+                        emoji_pattern = f":{shortcode}:"
+                        emoji_img_tag = f'<img src="{data_uri}" alt=":{shortcode}:" class="custom-emoji" title=":{shortcode}:" loading="lazy">'
+                        content_html = content_html.replace(emoji_pattern, emoji_img_tag)
+                except Exception as e:
+                    logging.warning(f"⚠️ 下载 emoji 失败 {shortcode}: {e}")
+                    # 失败时使用远程 URL
+                    emoji_pattern = f":{shortcode}:"
+                    emoji_img_tag = f'<img src="{static_url}" alt=":{shortcode}:" class="custom-emoji" title=":{shortcode}:" loading="lazy">'
+                    content_html = content_html.replace(emoji_pattern, emoji_img_tag)
+
+        # 处理时间
+        created_at = post["created_at"]
+        dt = datetime.strptime(created_at, "%Y-%m-%dT%H:%M:%S.%fZ").replace(tzinfo=timezone.utc)
+        china_time = dt.astimezone(timezone(timedelta(hours=8)))
+
+        post_data = {
+            "id": post["id"],
+            "content": content_html,
+            "created_at": china_time.strftime("%Y-%m-%d %H:%M:%S"),
+            "timestamp": created_at,  # 使用原始 ISO 格式时间字符串
+            "url": post["url"],
+            "sensitive": post.get("sensitive", False),
+            "spoiler_text": post.get("spoiler_text", ""),
+            "visibility": post.get("visibility", "public"),
+            "media_attachments": media_items,
+            "reblogs_count": post.get("reblogs_count", 0),
+            "favourites_count": post.get("favourites_count", 0),
+            "replies_count": post.get("replies_count", 0),
+            "in_reply_to_id": post.get("in_reply_to_id", None),
+            "in_reply_to_account_id": post.get("in_reply_to_account_id", None),
+            "account": {
+                "id": user_id,
+                "username": post["account"]["username"],
+                "display_name": post["account"].get("display_name", post["account"]["username"]),
+                "url": post["account"]["url"],
+                "avatar": post["account"]["avatar"]
+            },
+            "tags": [{"name": tag["name"]} for tag in post.get("tags", [])]
+        }
+        posts_data.append(post_data)
+
+    # 生成 HTML 内容
+    html_content = generate_html_template(username, display_name, avatar, instance_name, background_image,
+                                        total_posts, followers_count, following_count,
+                                        posts_data)
+
+    # 写入 HTML 文件
+    with open(html_filepath, 'w', encoding='utf-8') as f:
+        f.write(html_content)
+
+    logging.info(f"HTML 网页已生成至：{html_filepath}")
+    logging.info(f"包含 {total_posts} 条嘟文")
+    logging.info(f"图片路径：{media_folder}/")
+
+def generate_html_template(username, display_name, avatar, instance_name, background_image,
+                          total_posts, followers_count, following_count,
+                          posts_data):
+    """生成完整的 HTML 页面"""
+
+    # 将 posts_data 转换为 JSON 字符串
+    posts_json = json.dumps(posts_data, ensure_ascii=False)
+
+    # 使用 template.py 生成 HTML
+    return template.generate_html(
+        username=username,
+        display_name=display_name,
+        avatar=avatar,
+        instance_name=instance_name,
+        background_image=background_image,
+        total_posts=total_posts,
+        followers_count=followers_count,
+        following_count=following_count,
+        posts_json=posts_json
+    )
+
+
 def safe_remove_directory(path):
     """
     安全删除目录，处理权限问题和文件锁定
@@ -483,6 +766,13 @@ def main():
     logging.info("========================================")
     config = get_config()
 
+    # 验证配置
+    try:
+        validate_config(config)
+    except ValueError as e:
+        logging.error(f"配置验证失败：{e}")
+        return
+
     # 根据配置确定最终的备份路径
     base_path_str = config["backup"]["path"]
     backup_path = Path(base_path_str)
@@ -576,9 +866,21 @@ def main():
         generate_activity_summary(config, backup_path)
     else:
         logging.info("📊 没有新内容需要更新，跳过活动总结生成。")
+
+    # 生成 HTML 网页
+    try:
+        if posts_to_process:
+            logging.info("正在生成 Mastodon HTML 网页...")
+            generate_mastodon_html(posts_to_process, config, backup_path)
+        else:
+            logging.info("没有嘟文数据，跳过 HTML 网页生成。")
+    except Exception as e:
+        logging.error(f"HTML 网页生成失败：{e}")
+
     logging.info("========================================")
-    logging.info(" ✅ 同步完成！")
+    logging.info("同步完成！")
     logging.info("========================================")
 
 if __name__ == "__main__":
+    # 运行主程序
     main()
