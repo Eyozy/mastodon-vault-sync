@@ -50,7 +50,7 @@ jobs:
           # 使用固定的文件夹名称，确保所有帖子和媒体文件分别存放在 mastodon 和 media 文件夹下
           POSTS_FOLDER: mastodon
           MEDIA_FOLDER: media
-            FORCE_FULL_SYNC: ${{ github.event.inputs.force_full_sync == 'true' }}
+          FORCE_FULL_SYNC: ${{ github.event.inputs.force_full_sync == 'true' }}
         run: python main.py
 
       - name: Set Environment Variables from Secrets
