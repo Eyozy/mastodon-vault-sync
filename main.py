@@ -867,15 +867,31 @@ def main():
     else:
         logging.info("📊 没有新内容需要更新，跳过活动总结生成。")
 
-    # 生成 HTML 网页
+    # 生成 HTML 网页 - 始终生成以确保页面更新
     try:
-        if posts_to_process:
-            logging.info("正在生成 Mastodon HTML 网页...")
-            generate_mastodon_html(posts_to_process, config, backup_path)
+        posts_folder_path = backup_path / backup_config["posts_folder"]
+        if posts_folder_path.exists() and any(posts_folder_path.iterdir()):
+            logging.info("🌐 正在生成 Mastodon HTML 网页...")
+
+            # 无论是全量同步还是增量同步,都需要重新获取所有帖子用于 HTML 生成
+            # 因为 HTML 页面需要展示所有历史帖子
+            if is_full_sync and posts_to_process:
+                # 全量同步时,posts_to_process 已包含所有帖子
+                logging.info(f"📊 使用全量同步数据生成 HTML ({len(posts_to_process)} 条帖子)")
+                generate_mastodon_html(posts_to_process, config, backup_path)
+            else:
+                # 增量同步时,需要重新获取所有帖子(不限制页数)
+                logging.info("📊 增量同步模式,重新获取所有帖子用于 HTML 生成...")
+                all_posts_for_html = fetch_mastodon_posts(config)
+                if all_posts_for_html:
+                    logging.info(f"📊 获取到 {len(all_posts_for_html)} 条帖子，正在生成 HTML...")
+                    generate_mastodon_html(all_posts_for_html, config, backup_path)
+                else:
+                    logging.warning("⚠️ 无法获取帖子数据，HTML 生成失败")
         else:
-            logging.info("没有嘟文数据，跳过 HTML 网页生成。")
+            logging.info("ℹ️ 帖子文件夹不存在或为空，跳过 HTML 生成")
     except Exception as e:
-        logging.error(f"HTML 网页生成失败：{e}")
+        logging.error(f"❌ HTML 网页生成失败：{e}")
 
     logging.info("========================================")
     logging.info("同步完成！")
