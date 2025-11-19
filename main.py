@@ -867,29 +867,49 @@ def main():
     else:
         logging.info("📊 没有新内容需要更新，跳过活动总结生成。")
 
-    # 生成 HTML 网页 - 始终生成以确保页面更新
+    # 生成 HTML 网页 - 智能检测是否需要更新
     try:
-        posts_folder_path = backup_path / backup_config["posts_folder"]
-        if posts_folder_path.exists() and any(posts_folder_path.iterdir()):
-            logging.info("🌐 正在生成 Mastodon HTML 网页...")
+        html_filename = backup_config.get("html_filename", "index.html")
+        html_filepath = backup_path / html_filename
+        should_generate_html = False
+        posts_for_html = None
 
-            # 无论是全量同步还是增量同步,都需要重新获取所有帖子用于 HTML 生成
-            # 因为 HTML 页面需要展示所有历史帖子
+        # 判断是否需要生成 HTML
+        if not html_filepath.exists():
+            logging.info("🌐 HTML 文件不存在，准备首次生成...")
+            should_generate_html = True
+        elif is_full_sync:
+            logging.info("🔄 全量同步模式，将重新生成 HTML...")
+            should_generate_html = True
+        elif new_posts_count > 0:
+            logging.info(f"📊 检测到 {new_posts_count} 条新帖子，需要更新 HTML...")
+            should_generate_html = True
+        else:
+            logging.info("✅ HTML 文件已存在且无新内容，跳过生成")
+
+        # 如果需要生成 HTML，获取所有帖子数据
+        if should_generate_html:
             if is_full_sync and posts_to_process:
-                # 全量同步时,posts_to_process 已包含所有帖子
-                logging.info(f"📊 使用全量同步数据生成 HTML ({len(posts_to_process)} 条帖子)")
-                generate_mastodon_html(posts_to_process, config, backup_path)
+                # 全量同步时，posts_to_process 已包含所有帖子
+                logging.info(f"📊 使用全量同步数据 ({len(posts_to_process)} 条帖子)")
+                posts_for_html = posts_to_process
             else:
-                # 增量同步时,需要重新获取所有帖子(不限制页数)
-                logging.info("📊 增量同步模式,重新获取所有帖子用于 HTML 生成...")
+                # 增量同步或全量同步失败时，重新获取所有帖子
+                logging.info("📊 正在获取所有帖子用于 HTML 生成...")
                 all_posts_for_html = fetch_mastodon_posts(config)
                 if all_posts_for_html:
-                    logging.info(f"📊 获取到 {len(all_posts_for_html)} 条帖子，正在生成 HTML...")
-                    generate_mastodon_html(all_posts_for_html, config, backup_path)
+                    logging.info(f"📊 成功获取 {len(all_posts_for_html)} 条帖子")
+                    posts_for_html = all_posts_for_html
                 else:
-                    logging.warning("⚠️ 无法获取帖子数据，HTML 生成失败")
-        else:
-            logging.info("ℹ️ 帖子文件夹不存在或为空，跳过 HTML 生成")
+                    logging.error("❌ 无法从 API 获取帖子数据")
+
+            # 生成 HTML
+            if posts_for_html:
+                generate_mastodon_html(posts_for_html, config, backup_path)
+                logging.info(f"✅ HTML 网页已生成，包含 {len(posts_for_html)} 条嘟文")
+            else:
+                logging.error("❌ 没有可用的帖子数据，无法生成 HTML")
+
     except Exception as e:
         logging.error(f"❌ HTML 网页生成失败：{e}")
 
