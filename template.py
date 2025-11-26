@@ -615,12 +615,15 @@ CSS_STYLES = """
             margin-bottom: 0;
         }
 
-        
+
         .status-content a {
             color: var(--accent-color);
             text-decoration: none;
             position: relative;
             transition: color 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            word-wrap: break-word; /* 防止长链接溢出 */
+            overflow-wrap: break-word; /* 确保在所有浏览器中都有效 */
+            word-break: break-word; /* 处理特别长的单词 */
         }
 
         .status-content a::after {
@@ -1906,11 +1909,24 @@ JAVASCRIPT_CODE = """
         });
 """
 
-def get_html_body_template(username, display_name, avatar, instance_name, background_image,
-                           total_posts, followers_count, following_count):
+
+def get_html_body_template(
+    username,
+    display_name,
+    avatar,
+    instance_name,
+    background_image,
+    total_posts,
+    followers_count,
+    following_count,
+):
     """生成 HTML body 内容（带用户数据）"""
     # 处理背景图片
-    bg_style = f' style="background-image: url({background_image})"' if background_image else ''
+    bg_style = (
+        f' style="background-image: url({background_image})"'
+        if background_image
+        else ""
+    )
 
     return f"""<header class="header">
         <div class="header-content">
@@ -1988,8 +2004,18 @@ def get_html_body_template(username, display_name, avatar, instance_name, backgr
     </main>
 """
 
-def generate_html(username, display_name, avatar, instance_name, background_image,
-                  total_posts, followers_count, following_count, posts_json):
+
+def generate_html(
+    username,
+    display_name,
+    avatar,
+    instance_name,
+    background_image,
+    total_posts,
+    followers_count,
+    following_count,
+    posts_json,
+):
     """生成完整的 HTML 页面"""
 
     # 生成 HTML body（包含用户数据）
@@ -2001,7 +2027,7 @@ def generate_html(username, display_name, avatar, instance_name, background_imag
         background_image=background_image,
         total_posts=total_posts,
         followers_count=followers_count,
-        following_count=following_count
+        following_count=following_count,
     )
 
     # 组装完整 HTML

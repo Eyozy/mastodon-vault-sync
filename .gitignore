@@ -7,3 +7,6 @@ __pycache__/
 
 # 使用 GitHub Actions 部署请删除下面这行
 sync_state.json
+
+.claude
+.sepc-workflow

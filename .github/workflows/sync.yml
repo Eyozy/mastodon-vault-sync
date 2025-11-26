@@ -51,6 +51,8 @@ jobs:
           POSTS_FOLDER: mastodon
           MEDIA_FOLDER: media
           FORCE_FULL_SYNC: ${{ github.event.inputs.force_full_sync == 'true' }}
+          # 中国时区设置：true 使用 GMT+8，false 使用 UTC
+          CHINA_TIMEZONE: ${{ secrets.CHINA_TIMEZONE || 'false' }}
         run: python main.py
 
       - name: Set Environment Variables from Secrets

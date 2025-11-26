@@ -88,6 +88,7 @@ mastodon-sync/
 | `ARCHIVE_FILENAME`      | `archive.md`                        | **【可选】** 根目录下汇总文件的名称。**默认值：** `archive.md` |
 | `POSTS_FOLDER`          | `mastodon`                          | **【可选】** 存放单条嘟文的文件夹名。**默认值：** `mastodon` |
 | `MEDIA_FOLDER`          | `media`                             | **【可选】** 存放媒体文件的文件夹名。**默认值：** `media` |
+| `CHINA_TIMEZONE`        | `false`                              | **【可选】** 是否使用中国时区（GMT+8）进行同步。**默认值：** `false` |
 
 #### 第 3 步：配置远程仓库（可选）
 
