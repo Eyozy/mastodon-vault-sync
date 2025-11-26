@@ -156,7 +156,8 @@ def get_config():
                 "html_filename": os.environ.get("HTML_FILENAME") or "index.html",
             },
             "sync": {
-                "state_file": "sync_state.json"
+                "state_file": "sync_state.json",
+                "china_timezone": os.environ.get("CHINA_TIMEZONE", "false").lower() == "true"
             }
         }
 
@@ -173,6 +174,11 @@ def get_config():
         backup_conf.setdefault("filename", "archive.md")
         backup_conf.setdefault("media_folder", "media")
         backup_conf.setdefault("summary_filename", "README.md")
+
+        # 确保 sync 部分存在并提供默认值
+        sync_conf = config.setdefault("sync", {})
+        sync_conf.setdefault("china_timezone", False)
+
         return config
     except FileNotFoundError:
         logging.error("❌ 错误：找不到 config.yaml 文件。程序无法运行。")
@@ -180,6 +186,26 @@ def get_config():
     except yaml.YAMLError as e:
         logging.error(f"❌ 错误：配置文件格式错误：{e}")
         sys.exit(1)
+
+def get_timezone_aware_datetime(created_at_str, china_timezone=False):
+    """
+    根据配置的时区设置转换时间字符串
+
+    Args:
+        created_at_str: ISO 格式的时间字符串
+        china_timezone: 是否使用中国时区（GMT+8）
+
+    Returns:
+        转换后的带时区的 datetime 对象
+    """
+    dt = datetime.strptime(created_at_str, "%Y-%m-%dT%H:%M:%S.%fZ").replace(tzinfo=timezone.utc)
+
+    if china_timezone:
+        # 使用中国时区 (GMT+8)
+        return dt.astimezone(timezone(timedelta(hours=8)))
+    else:
+        # 使用 UTC
+        return dt
 
 def parse_rate_limit_reset(reset_header):
     """解析 Mastodon API 的 X-RateLimit-Reset 时间戳"""
@@ -319,9 +345,9 @@ def download_media(media_item, media_folder_path):
         logging.error(f"❌ 下载媒体文件失败：{media_item['url']} - {e}")
         return None
 
-def format_single_post_for_archive(post, media_folder_name, media_file_map):
-    cst_dt = datetime.strptime(post["created_at"], "%Y-%m-%dT%H:%M:%S.%fZ").replace(tzinfo=timezone.utc).astimezone(timezone(timedelta(hours=8)))
-    time_str = cst_dt.strftime("%H:%M")
+def format_single_post_for_archive(post, media_folder_name, media_file_map, china_timezone=False):
+    local_dt = get_timezone_aware_datetime(post["created_at"], china_timezone)
+    time_str = local_dt.strftime("%H:%M")
     is_reply = post.get("in_reply_to_id")
     icon = "💬" if is_reply else "📝"
     heading = f"## {time_str} {icon} {'回复' if is_reply else '嘟文'}"
@@ -338,10 +364,10 @@ def format_single_post_for_archive(post, media_folder_name, media_file_map):
             attachments_md = ("\n\n" if content_md else "") + "\n".join(media_parts)
     return f"{heading}\n\n**内容**：{content_md}{attachments_md}\n\n{source_link_text}：{post['url']}\n\n---\n\n"
 
-def format_post_for_single_file(post, media_folder_name, media_file_map):
-    cst_dt = datetime.strptime(post["created_at"], "%Y-%m-%dT%H:%M:%S.%fZ").replace(tzinfo=timezone.utc).astimezone(timezone(timedelta(hours=8)))
+def format_post_for_single_file(post, media_folder_name, media_file_map, china_timezone=False):
+    local_dt = get_timezone_aware_datetime(post["created_at"], china_timezone)
     frontmatter = {
-        "id": post["id"], "createdAt": cst_dt.strftime("%Y-%m-%d %H:%M:%S"),
+        "id": post["id"], "createdAt": local_dt.strftime("%Y-%m-%d %H:%M:%S"),
         "source": post["url"], "type": "reply" if post["in_reply_to_id"] else "toot",
         "tags": [f"#{tag['name']}" for tag in post["tags"]]}
     if post["in_reply_to_id"]:
@@ -369,15 +395,15 @@ def update_archive_file(posts_to_update, config, all_posts_from_server, backup_p
             if block.strip() and (match := re.search(r'https://[^\/]+\/[^\/]+\/(\d+)', block)):
                 existing_posts_by_id[match.group(1)] = block
     for post in posts_to_update:
-        existing_posts_by_id[post['id']] = format_single_post_for_archive(post, media_folder_name, config["media_file_map"]).strip()
+        existing_posts_by_id[post['id']] = format_single_post_for_archive(post, media_folder_name, config["media_file_map"], config["sync"]["china_timezone"]).strip()
     # 编辑检测范围：最近 200 条帖子（约 1-2 周的内容）
     logging.info("📝 编辑检测范围：最近 200 条帖子，覆盖约 1-2 周内的编辑更新")
     rebuilt_posts_by_day = defaultdict(list)
     all_posts_dict = {p['id']: p for p in all_posts_from_server}
     for post_id, content in existing_posts_by_id.items():
         if (post_data := all_posts_dict.get(post_id)):
-            cst_dt = datetime.strptime(post_data["created_at"], "%Y-%m-%dT%H:%M:%S.%fZ").replace(tzinfo=timezone.utc).astimezone(timezone(timedelta(hours=8)))
-            rebuilt_posts_by_day[cst_dt.strftime("%Y-%m-%d")].append({'content': content, 'created_at': post_data['created_at']})
+            local_dt = get_timezone_aware_datetime(post_data["created_at"], config["sync"]["china_timezone"])
+            rebuilt_posts_by_day[local_dt.strftime("%Y-%m-%d")].append({'content': content, 'created_at': post_data['created_at']})
     final_content = ""
     for date_str in sorted(rebuilt_posts_by_day.keys(), reverse=True):
         final_content += f"# {date_str}\n\n"
@@ -401,10 +427,10 @@ def save_posts(posts, config, all_posts_from_server, backup_path):
     update_archive_file(posts, config, all_posts_from_server, backup_path)
     posts_folder_path.mkdir(parents=True, exist_ok=True)
     for post in posts:
-        cst_dt = datetime.strptime(post["created_at"], "%Y-%m-%dT%H:%M:%S.%fZ").replace(tzinfo=timezone.utc).astimezone(timezone(timedelta(hours=8)))
-        filename = f"{cst_dt.strftime('%Y-%m-%d_%H%M%S')}_{post['id']}.md"
+        local_dt = get_timezone_aware_datetime(post["created_at"], config["sync"]["china_timezone"])
+        filename = f"{local_dt.strftime('%Y-%m-%d_%H%M%S')}_{post['id']}.md"
         file_path = posts_folder_path / filename
-        new_content = format_post_for_single_file(post, backup_config["media_folder"], media_file_map)
+        new_content = format_post_for_single_file(post, backup_config["media_folder"], media_file_map, config["sync"]["china_timezone"])
         if not file_path.exists() or file_path.read_text('utf-8') != new_content:
             try:
                 file_path.write_text(new_content, encoding='utf-8')
@@ -599,13 +625,12 @@ def generate_mastodon_html(posts, config, backup_path):
 
         # 处理时间
         created_at = post["created_at"]
-        dt = datetime.strptime(created_at, "%Y-%m-%dT%H:%M:%S.%fZ").replace(tzinfo=timezone.utc)
-        china_time = dt.astimezone(timezone(timedelta(hours=8)))
+        local_time = get_timezone_aware_datetime(created_at, config["sync"]["china_timezone"])
 
         post_data = {
             "id": post["id"],
             "content": content_html,
-            "created_at": china_time.strftime("%Y-%m-%d %H:%M:%S"),
+            "created_at": local_time.strftime("%Y-%m-%d %H:%M:%S"),
             "timestamp": created_at,  # 使用原始 ISO 格式时间字符串
             "url": post["url"],
             "sensitive": post.get("sensitive", False),
