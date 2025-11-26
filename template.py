@@ -208,6 +208,7 @@ CSS_STYLES = """
             display: flex;
             align-items: center;
             gap: 1rem;
+            padding: 1rem 0; 
         }
 
         .search-container {
@@ -795,7 +796,7 @@ CSS_STYLES = """
         
         @media (max-width: 768px) {
             .header-content {
-                padding: 0 0.5rem;
+                padding: 1rem 0.5rem;
             }
 
             .container {
@@ -1056,22 +1057,12 @@ CSS_STYLES = """
             }
 
             .status-footer {
-                flex-direction: column;
-                align-items: flex-start;
-                gap: 0.75rem;
-                margin-top: 0.75rem;
-                padding-top: 0.75rem;
-            }
-
-            .status-stats {
-                order: 2;
-                width: 100%;
-                gap: 1rem;
+                flex-direction: row;
+                justify-content: space-between;
             }
 
             .status-link {
-                order: 1;
-                align-self: flex-end;
+                align-self: center;
             }
 
             .pagination {
