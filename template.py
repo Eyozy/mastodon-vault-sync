@@ -533,18 +533,21 @@ h4, .h4 {
     display: flex;
     gap: 0.75rem;
     margin-bottom: 1rem;
+    align-items: center;
 }
 
 .status-avatar {
-    width: 48px;
-    height: 48px;
+    width: 46px;
+    height: 46px;
     border-radius: 12%;
     flex-shrink: 0;
+    object-fit: cover;
 }
 
 .status-meta {
     flex: 1;
     min-width: 0;
+    display: block;
 }
 
 .status-name {
@@ -553,7 +556,7 @@ h4, .h4 {
     text-decoration: none;
     font-size: 0.95rem;
     line-height: 1.3;
-    margin-bottom: 2px;
+    display: block;
 }
 
 .status-name:hover {
@@ -565,7 +568,7 @@ h4, .h4 {
     font-size: 0.85rem;
     line-height: 1.3;
     display: block;
-    margin-top: 2px;
+    margin-top: 0.15rem;
 }
 
 .status-time {
@@ -1070,15 +1073,6 @@ input:focus-visible {
         line-height: 1.5;
     }
 
-    .status-content a {
-        font-size: 0.95em;
-    }
-
-    .status-content a[href*="mastodon"] {
-        font-size: 0.8em;
-        padding: 2px 6px;
-    }
-
     .status-link {
         font-size: 0.8rem;
         padding: 4px 8px;
@@ -1198,11 +1192,6 @@ input:focus-visible {
 
     .status-content {
         font-size: 0.85rem;
-    }
-
-    .status-content a[href*="mastodon"] {
-        font-size: 0.75em;
-        padding: 1px 4px;
     }
 
     .status-link {
@@ -1696,6 +1685,7 @@ document.addEventListener('keydown', function(e) {
         });
     }
 });
+
 """
 
 

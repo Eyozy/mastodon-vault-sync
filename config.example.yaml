@@ -38,3 +38,13 @@ backup:
 sync:
   # 用于记录上次同步状态的文件名
   state_file: "sync_state.json"
+
+  # 时区设置：控制备份文件和网页中显示的时间
+  # - true: 使用中国时区 (GMT+8)，时间会自动转换为北京时间
+  # - false: 使用 UTC 时区 (协调世界时)
+  # 默认值：false
+  #
+  # 示例：如果 Mastodon API 返回时间为 2025-01-15T06:30:00.000Z (UTC)
+  #   - china_timezone: false → 显示 "2025-01-15 06:30:00"
+  #   - china_timezone: true  → 显示 "2025-01-15 14:30:00" (UTC+8)
+  china_timezone: false

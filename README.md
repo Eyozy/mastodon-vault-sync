@@ -78,7 +78,7 @@ mastodon-vault-sync/
 | `ARCHIVE_FILENAME`      | `archive.md`                       | ❌   | 汇总文件名，默认 `archive.md` |
 | `POSTS_FOLDER`          | `mastodon`                         | ❌   | 帖子目录名，默认 `mastodon` |
 | `MEDIA_FOLDER`          | `media`                            | ❌   | 媒体目录名，默认 `media` |
-| `CHINA_TIMEZONE`        | `false`                            | ❌   | 是否使用中国时区，默认 `false` |
+| `CHINA_TIMEZONE`        | `false`                            | ❌   | 时区设置：`true` 使用中国时区 (GMT+8)，`false` 使用 UTC。默认 `false` |
 
 **配置远程仓库同步（可选）**：
 
@@ -140,6 +140,40 @@ cp config.example.yaml config.yaml
 # 编辑配置文件，填入你的凭证
 ```
 
+**配置说明：**
+
+在 `config.yaml` 中，你需要配置以下内容：
+
+```yaml
+mastodon:
+  instance_url: "https://mastodon.social"  # 你的 Mastodon 实例地址
+  user_id: "123456789012345678"             # 你的用户 ID
+  access_token: "your_access_token"         # 你的访问令牌
+
+backup:
+  path: "."                                 # 本地备份路径
+  posts_folder: "mastodon"                  # 帖子目录名
+  filename: "archive.md"                    # 汇总文件名
+  media_folder: "media"                     # 媒体目录名
+
+sync:
+  state_file: "sync_state.json"             # 同步状态文件名
+  china_timezone: true                      # 时区设置（见下方说明）
+```
+
+**时区设置详解：**
+
+`china_timezone` 控制备份文件和网页中显示的时间格式：
+
+| 配置值 | 效果 | 示例 |
+|--------|------|------|
+| `true` | 使用中国时区 (GMT+8) | API 时间 `2025-08-11T00:00:00Z` → 显示 `2025-08-11 08:00:00` |
+| `false` | 使用 UTC 时区 | API 时间 `2025-08-11T00:00:00Z` → 显示 `2025-08-11 00:00:00` |
+
+- 默认值：`false`
+- 影响范围：备份 Markdown 文件、HTML 网页、README 热力图中的所有时间显示
+- 建议：中国大陆用户设置为 `true`，其他地区根据实际时区选择
+
 #### 第 3 步：运行脚本
 
 ```bash
@@ -171,7 +205,6 @@ python main.py --cleanup
 
 - **年度发帖总数**
 - **GitHub 风格热力图**：按日期显示发帖频率
-- **交互式可视化**：鼠标悬停查看具体日期发帖数
 
 报告默认生成在仓库根目录的 `README.md` 文件中。
 

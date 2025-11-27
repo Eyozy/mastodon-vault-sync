@@ -111,14 +111,14 @@ jobs:
           mkdir -p "$POSTS_DIR" "$MEDIA_DIR"
           
           # 清理旧的备份文件，确保完全同步
-          rm -rf "$POSTS_DIR" "$MEDIA_DIR" "$ARCHIVE_FILE" "README.md" "heatmap.svg" "index.html"
+          rm -rf "$POSTS_DIR" "$MEDIA_DIR" "$ARCHIVE_FILE" "README.md" heatmap-*.svg "index.html"
 
           # 首先将文件复制到临时位置
           cp -r "../$POSTS_DIR" ./
           cp -r "../$MEDIA_DIR" ./
           cp "../$ARCHIVE_FILE" ./
           cp "../README.md" ./
-          cp "../heatmap.svg" ./
+          cp ../heatmap-*.svg ./ 2>/dev/null || true
           cp "../index.html" ./
           
           # 确保文件在正确的位置，没有错误地移动到根目录
