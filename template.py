@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import re
 
 CSS_STYLES = """
 :root {
@@ -718,11 +719,13 @@ h4, .h4 {
 
 .hashtag {
     color: var(--accent-color);
-    text-decoration: none;
+    text-decoration: none !important;  /* 确保覆盖原始内容中的样式 */
+    transition: border-bottom-color 0.2s ease;
 }
 
 .hashtag:hover {
-    text-decoration: underline;
+    text-decoration: none !important;  /* 确保没有默认下划线 */
+    border-bottom: 1px solid var(--accent-color);  /* 使用底部边框作为下划线 */
 }
 
 .custom-emoji {
@@ -1469,7 +1472,6 @@ function createPostHTML(post) {
                 </div>
                 <div class="status-content">
                     ${post.content}
-                    ${tagsHTML ? `<div style="margin-top: 0.5rem;">${tagsHTML}</div>` : ''}
                 </div>
                 ${mediaHTML}
                 <div class="status-footer">
@@ -1496,7 +1498,6 @@ function createPostHTML(post) {
                 </div>
                 <div class="status-content">
                     ${post.content}
-                    ${tagsHTML ? `<div style="margin-top: 0.5rem;">${tagsHTML}</div>` : ''}
                 </div>
                 ${mediaHTML}
                 <div class="status-footer">
@@ -1523,7 +1524,6 @@ function createPostHTML(post) {
                 </div>
                 <div class="status-content">
                     ${post.content}
-                    ${tagsHTML ? `<div style="margin-top: 0.5rem;">${tagsHTML}</div>` : ''}
                 </div>
                 ${mediaHTML}
                 <div class="status-footer">
@@ -1789,7 +1789,8 @@ def generate_html(
     display_name,
     avatar,
     instance_name,
-    background_image,
+    background_image,  # 用于页面背景的本地路径
+    og_image_url,       # 用于 OpenGraph 的完整 URL
     total_posts,
     followers_count,
     following_count,
@@ -1817,11 +1818,11 @@ def generate_html(
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>@{username}的 Mastodon 备份</title>
-    <meta name="description" content="{user_bio.replace('<[^<]+?>', '')[:160]}">
+    <meta name="description" content="{re.sub(r'<[^<]+?>', '', user_bio).strip()[:160]}">
     <meta property="og:title" content="@{username}@{instance_name}">
-    <meta property="og:description" content="{user_bio.replace('<[^<]+?>', '')[:160]}">
+    <meta property="og:description" content="{re.sub(r'<[^<]+?>', '', user_bio).strip()[:160]}">
     <meta property="og:type" content="profile">
-    <meta property="og:image" content="{background_image}">
+    <meta property="og:image" content="{og_image_url if og_image_url else background_image}">
     <link rel="icon" type="image/png" href="{avatar}">
     <style>
 {CSS_STYLES}
