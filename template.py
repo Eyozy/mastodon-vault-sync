@@ -1822,6 +1822,7 @@ def generate_html(
     <meta property="og:description" content="{user_bio.replace('<[^<]+?>', '')[:160]}">
     <meta property="og:type" content="profile">
     <meta property="og:image" content="{background_image}">
+    <link rel="icon" type="image/png" href="{avatar}">
     <style>
 {CSS_STYLES}
     </style>
