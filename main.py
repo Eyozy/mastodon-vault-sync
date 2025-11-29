@@ -587,6 +587,8 @@ def generate_mastodon_html(posts, config, backup_path):
         # 从 URL 中提取实例名称
         user_url = user["url"]
         instance_name = user_url.split("//")[1].split("/")[0] if "//" in user_url else ""
+        # 获取用户简介
+        user_bio = user.get("note", "")  # note 字段包含用户的简介
         # 保存用户信息到配置中，供热力图使用
         config["username"] = username
         config["instance"] = instance_name
@@ -707,8 +709,7 @@ def generate_mastodon_html(posts, config, backup_path):
 
     # 生成 HTML 内容
     html_content = generate_html_template(username, display_name, avatar, instance_name, background_image,
-                                        total_posts, followers_count, following_count,
-                                        posts_data)
+                                        total_posts, followers_count, following_count, posts_data, user_bio)
 
     # 写入 HTML 文件
     with open(html_filepath, 'w', encoding='utf-8') as f:
@@ -720,7 +721,7 @@ def generate_mastodon_html(posts, config, backup_path):
 
 def generate_html_template(username, display_name, avatar, instance_name, background_image,
                           total_posts, followers_count, following_count,
-                          posts_data):
+                          posts_data, user_bio):
     """生成完整的 HTML 页面"""
 
     # 将 posts_data 转换为 JSON 字符串
@@ -736,7 +737,8 @@ def generate_html_template(username, display_name, avatar, instance_name, backgr
         total_posts=total_posts,
         followers_count=followers_count,
         following_count=following_count,
-        posts_json=posts_json
+        posts_json=posts_json,
+        user_bio=user_bio
     )
 
 

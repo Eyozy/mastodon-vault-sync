@@ -1794,6 +1794,7 @@ def generate_html(
     followers_count,
     following_count,
     posts_json,
+    user_bio,
 ):
     """生成完整的 HTML 页面"""
 
@@ -1815,7 +1816,12 @@ def generate_html(
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>@{username} 的 Mastodon 备份</title>
+    <title>@{username}的 Mastodon 备份</title>
+    <meta name="description" content="{user_bio.replace('<[^<]+?>', '')[:160]}">
+    <meta property="og:title" content="@{username}@{instance_name}">
+    <meta property="og:description" content="{user_bio.replace('<[^<]+?>', '')[:160]}">
+    <meta property="og:type" content="profile">
+    <meta property="og:image" content="{background_image}">
     <style>
 {CSS_STYLES}
     </style>
