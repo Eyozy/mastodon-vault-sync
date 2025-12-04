@@ -1,0 +1,50 @@
+# ===============================================================
+# Mastodon 本地备份工具 - 配置文件 (本地运行用)
+# 运行在 GitHub Actions 时，程序会优先使用环境变量，此文件不会被读取。
+# 如果你想在本地运行脚本，请将此文件重命名为 "config.yaml" 并填写信息。
+# ===============================================================
+
+mastodon:
+  # 你的 Mastodon 实例 URL (例如: "https://mastodon.social")
+  instance_url: "https://mastodon.social"
+
+  # 你的 Mastodon 用户 ID (一串数字)
+  # 如何获取: 访问 https://<你的实例地址>/api/v1/accounts/lookup?acct=<你的用户名>
+  # 假设你的实例是 `mastodon.social`，用户名是 `YourUsername`，那么 URL 就是：
+  # `https://mastodon.social/api/v1/accounts/lookup?acct=YourUsername`
+  # 访问这个 URL，页面上会显示一些 JSON 文本
+  # 找到 `"id":` 字段，它后面引号里的一长串数字就是你的用户 ID，复制这串数字。
+  user_id: "YOUR_USER_ID"
+
+  # 你的 Mastodon API 访问令牌
+  # 如何获取: 前往 首选项 -> 开发 -> 新建应用，赋予 read:statuses 权限
+  access_token: "YOUR_ACCESS_TOKEN"
+
+backup:
+  # 本地备份的绝对路径
+  # Windows 示例: "C:/Users/YourUser/Documents/backup"
+  # macOS/Linux 示例: "/Users/yourname/Documents/backup"
+
+  path: "."
+  # 在本地中用于存放 Mastodon 笔记的文件夹名称
+  # 如果文件夹不存在，程序会自动创建
+  posts_folder: "mastodon"
+  filename: "archive.md"
+  media_folder: "media"
+  
+# ===============================================================
+# 高级设置
+# ===============================================================
+sync:
+  # 用于记录上次同步状态的文件名
+  state_file: "sync_state.json"
+
+  # 时区设置：控制备份文件和网页中显示的时间
+  # - true: 使用中国时区 (GMT+8)，时间会自动转换为北京时间
+  # - false: 使用 UTC 时区 (协调世界时)
+  # 默认值：false
+  #
+  # 示例：如果 Mastodon API 返回时间为 2025-01-15T06:30:00.000Z (UTC)
+  #   - china_timezone: false → 显示 "2025-01-15 06:30:00"
+  #   - china_timezone: true  → 显示 "2025-01-15 14:30:00" (UTC+8)
+  china_timezone: false

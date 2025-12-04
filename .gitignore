@@ -1,0 +1,12 @@
+# 忽略本地配置文件，避免意外上传敏感信息
+config.yaml
+
+# 忽略 Python 缓存文件
+__pycache__/
+*.pyc
+
+# 使用 GitHub Actions 部署请删除下面这行
+sync_state.json
+
+.claude
+.sepc-workflow
