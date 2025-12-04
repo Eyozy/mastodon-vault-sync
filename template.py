@@ -1422,6 +1422,7 @@ document.addEventListener('DOMContentLoaded', function() {
     setupSearch();
     setupThemeToggle();
     setupPagination();
+    setupImageModal();
 });
 
 function renderCurrentPage() {
@@ -1442,6 +1443,9 @@ function renderCurrentPage() {
 
     timeline.innerHTML = postsToShow.map(post => createPostHTML(post)).join('');
     updatePaginationUI();
+
+    // 重新绑定图片点击事件
+    setupImageModal();
 }
 
 function renderPosts(posts) {
@@ -1736,7 +1740,9 @@ window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', fun
 });
 
 // 图片点击放大功能
-document.addEventListener('DOMContentLoaded', function() {
+let modalInitialized = false;
+
+function setupImageModal() {
     const modal = document.getElementById('imageModal');
     const modalImg = document.getElementById('modalImage');
     const captionText = document.getElementById('caption');
@@ -1753,26 +1759,31 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
-    // 点击关闭按钮
-    const closeBtn = document.querySelector('#imageModal .close');
-    closeBtn.addEventListener('click', function() {
-        modal.style.display = 'none';
-    });
-
-    // 点击模态框背景关闭
-    modal.addEventListener('click', function(e) {
-        if (e.target === modal) {
+    // 只初始化一次事件监听器
+    if (!modalInitialized) {
+        // 点击关闭按钮
+        const closeBtn = document.querySelector('#imageModal .close');
+        closeBtn.onclick = function() {
             modal.style.display = 'none';
-        }
-    });
+        };
 
-    // 按 ESC 键关闭
-    document.addEventListener('keydown', function(e) {
-        if (e.key === 'Escape' && modal.style.display === 'block') {
-            modal.style.display = 'none';
-        }
-    });
-});
+        // 点击模态框背景关闭
+        modal.onclick = function(e) {
+            if (e.target === modal) {
+                modal.style.display = 'none';
+            }
+        };
+
+        // 按 ESC 键关闭
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape' && modal.style.display === 'block') {
+                modal.style.display = 'none';
+            }
+        });
+
+        modalInitialized = true;
+    }
+}
 
 const backToTopBtn = document.createElement('button');
 backToTopBtn.className = 'back-to-top';
