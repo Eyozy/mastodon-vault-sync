@@ -709,7 +709,7 @@ def generate_mastodon_html(posts, config, backup_path):
 
     # 生成 HTML 内容
     html_content = generate_html_template(username, display_name, avatar, instance_name, background_image,
-                                        header, total_posts, followers_count, following_count, posts_data, user_bio)
+                                        total_posts, followers_count, following_count, posts_data, user_bio)
 
     # 写入 HTML 文件
     with open(html_filepath, 'w', encoding='utf-8') as f:
@@ -720,7 +720,7 @@ def generate_mastodon_html(posts, config, backup_path):
     logging.info(f"图片路径：{media_folder}/")
 
 def generate_html_template(username, display_name, avatar, instance_name, background_image,
-                          og_image_url, total_posts, followers_count, following_count,
+                          total_posts, followers_count, following_count,
                           posts_data, user_bio):
     """生成完整的 HTML 页面"""
 
@@ -734,7 +734,6 @@ def generate_html_template(username, display_name, avatar, instance_name, backgr
         avatar=avatar,
         instance_name=instance_name,
         background_image=background_image,
-        og_image_url=og_image_url,
         total_posts=total_posts,
         followers_count=followers_count,
         following_count=following_count,

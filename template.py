@@ -1933,7 +1933,6 @@ def generate_html(
     avatar,
     instance_name,
     background_image,  # 用于页面背景的本地路径
-    og_image_url,       # 用于 OpenGraph 的完整 URL
     total_posts,
     followers_count,
     following_count,
@@ -1965,9 +1964,6 @@ def generate_html(
     <meta property="og:title" content="@{username}@{instance_name}">
     <meta property="og:description" content="{re.sub(r'<[^<]+?>', '', user_bio).strip()[:160]}">
     <meta property="og:type" content="profile">
-    <meta property="og:image" content="{og_image_url if og_image_url else background_image}">
-    <meta property="og:image:width" content="1200">
-    <meta property="og:image:height" content="630">
     <link rel="icon" type="image/png" href="{avatar}">
     <style>
 {CSS_STYLES}
