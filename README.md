@@ -222,8 +222,6 @@ python main.py help
 - 如果你的 Windows 环境没有 `py` 命令，可以把文档里的 `py -m ...` 改成 `python -m ...`
 - 首次运行建议使用 `sync --full` 获取完整历史记录
 
----
-
 ### 方式二：GitHub Actions（自动化）
 
 #### 第 1 步：Fork 仓库
@@ -331,9 +329,9 @@ python main.py cleanup
 - 清理操作会永久删除当前备份目录中的旧帖子和旧媒体文件
 - `cleanup` 本身就会完成重建，不需要再额外执行 `sync --full`
 
-## 👨‍💻 开发者指南
+## 👨‍💻 开发设置
 
-### 开发环境设置
+### 环境设置
 
 ```bash
 # 安装运行依赖
