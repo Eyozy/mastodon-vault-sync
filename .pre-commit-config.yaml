@@ -1,6 +1,6 @@
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.5.0
+    rev: v6.0.0
     hooks:
       - id: trailing-whitespace
         name: 删除行尾空格
@@ -19,21 +19,21 @@ repos:
         name: 统一行尾符号
 
   - repo: https://github.com/psf/black
-    rev: 24.1.1
+    rev: 25.11.0
     hooks:
       - id: black
         name: 格式化 Python 代码
         language_version: python3
 
   - repo: https://github.com/pycqa/isort
-    rev: 5.13.2
+    rev: 6.1.0
     hooks:
       - id: isort
         name: 排序 import 语句
         args: ["--profile", "black"]
 
   - repo: https://github.com/pycqa/flake8
-    rev: 7.0.0
+    rev: 7.3.0
     hooks:
       - id: flake8
         name: 检查代码质量
