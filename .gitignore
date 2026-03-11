@@ -1,0 +1,48 @@
+# 忽略本地配置文件，避免意外上传敏感信息
+config.yaml
+
+# 忽略 Python 缓存文件
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# 忽略虚拟环境
+venv/
+env/
+.venv/
+ENV/
+
+# 忽略测试缓存
+.pytest_cache/
+.coverage
+htmlcov/
+*.cover
+
+# 忽略 IDE 配置
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 忽略系统文件
+.DS_Store
+Thumbs.db
+.worktree
+
+# 使用 GitHub Actions 部署请删除下面这行
+sync_state.json
+
+# 忽略 Claude 配置
+.claude
+
+# 忽略生成的备份文件（如果在项目目录内）
+backup/
+mastodon/
+media/
+archive.md
+
+# 忽略日志文件
+*.log

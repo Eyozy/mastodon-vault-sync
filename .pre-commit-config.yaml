@@ -1,0 +1,40 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+        name: 删除行尾空格
+      - id: end-of-file-fixer
+        name: 确保文件以换行符结尾
+      - id: check-yaml
+        name: 检查 YAML 语法
+      - id: check-json
+        name: 检查 JSON 语法
+      - id: check-added-large-files
+        name: 防止提交大文件
+        args: ['--maxkb=1000']
+      - id: check-merge-conflict
+        name: 检查合并冲突标记
+      - id: mixed-line-ending
+        name: 统一行尾符号
+
+  - repo: https://github.com/psf/black
+    rev: 24.1.1
+    hooks:
+      - id: black
+        name: 格式化 Python 代码
+        language_version: python3
+
+  - repo: https://github.com/pycqa/isort
+    rev: 5.13.2
+    hooks:
+      - id: isort
+        name: 排序 import 语句
+        args: ["--profile", "black"]
+
+  - repo: https://github.com/pycqa/flake8
+    rev: 7.0.0
+    hooks:
+      - id: flake8
+        name: 检查代码质量
+        args: ['--max-line-length=150', '--extend-ignore=E203,W503']
