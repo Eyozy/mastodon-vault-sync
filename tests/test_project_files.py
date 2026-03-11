@@ -36,6 +36,8 @@ def test_ci_workflow_exists_and_runs_quality_checks():
     assert "name: CI" in content
     assert "pre_commit" in content or "pre-commit" in content
     assert "pytest" in content
+    assert "tests/test_sync_flow.py" in content
+    assert "tests/test_cleanup_flow.py" in content
 
 
 def test_issue_and_pr_templates_exist():

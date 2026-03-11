@@ -16,33 +16,45 @@ from .render import format_post_for_single_file
 from .utils import get_timezone_aware_datetime
 
 MEDIA_DOWNLOAD_CONCURRENCY = 8
+MEDIA_DOWNLOAD_RETRY_ATTEMPTS = 3
+MEDIA_DOWNLOAD_RETRY_BASE_DELAY_SECONDS = 1
 
 
 async def download_media(
     session: aiohttp.ClientSession, media_item: Dict[str, Any], media_folder_path: Path
 ) -> Optional[str]:
-    try:
-        url = media_item["url"]
-        original_filename = Path(urlparse(url).path).name
-        local_filename = f"{media_item['id']}-{original_filename}"
-        local_file_path = media_folder_path / local_filename
+    url = media_item["url"]
+    original_filename = Path(urlparse(url).path).name
+    local_filename = f"{media_item['id']}-{original_filename}"
+    local_file_path = media_folder_path / local_filename
 
-        if local_file_path.exists():
-            return local_filename
-
-        async with session.get(url) as response:
-            response.raise_for_status()
-            async with aiofiles.open(local_file_path, "wb") as f:
-                while True:
-                    chunk = await response.content.read(8192)
-                    if not chunk:
-                        break
-                    await f.write(chunk)
-
+    if local_file_path.exists():
         return local_filename
-    except Exception as e:
-        logging.error(f"❌ 下载媒体文件失败：{media_item.get('url')} - {e}")
-        return None
+
+    for attempt in range(1, MEDIA_DOWNLOAD_RETRY_ATTEMPTS + 1):
+        try:
+            async with session.get(url) as response:
+                response.raise_for_status()
+                async with aiofiles.open(local_file_path, "wb") as f:
+                    while True:
+                        chunk = await response.content.read(8192)
+                        if not chunk:
+                            break
+                        await f.write(chunk)
+            return local_filename
+        except Exception as e:
+            if local_file_path.exists():
+                local_file_path.unlink(missing_ok=True)
+            if attempt == MEDIA_DOWNLOAD_RETRY_ATTEMPTS:
+                logging.error(f"❌ 下载媒体文件失败：{media_item.get('url')} - {e}")
+                return None
+            wait_time = MEDIA_DOWNLOAD_RETRY_BASE_DELAY_SECONDS * attempt
+            logging.warning(
+                f"⚠️ 媒体下载失败，第 {attempt} 次重试前等待 {wait_time} 秒：{e}"
+            )
+            await asyncio.sleep(wait_time)
+
+    return None
 
 
 async def download_all_media(

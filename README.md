@@ -375,6 +375,9 @@ py -m pre_commit run --all-files
 # macOS / Linux: 运行所有测试
 python3 -m pytest tests/ -v
 
+# macOS / Linux: 运行流程级 smoke tests
+python3 -m pytest tests/test_sync_flow.py tests/test_cleanup_flow.py -v
+
 # macOS / Linux: 运行特定测试
 python3 -m pytest tests/test_basic.py -v
 ```
@@ -383,9 +386,14 @@ python3 -m pytest tests/test_basic.py -v
 # Windows: 运行所有测试
 py -m pytest tests/ -v
 
+# Windows: 运行流程级 smoke tests
+py -m pytest tests/test_sync_flow.py tests/test_cleanup_flow.py -v
+
 # Windows: 运行特定测试
 py -m pytest tests/test_basic.py -v
 ```
+
+CI 除了运行完整测试套件外，还会单独执行同步与 cleanup 的流程级 smoke tests。
 
 更详细的测试说明和常见问题见 [tests/README.md](tests/README.md)。
 

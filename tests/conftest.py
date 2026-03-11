@@ -34,3 +34,40 @@ def sample_config(temp_dir):
         },
         "sync": {"state_file": "sync_state.json", "china_timezone": False},
     }
+
+
+@pytest.fixture
+def make_post():
+    """构造满足同步流程的 Mastodon 帖子数据"""
+
+    def _make_post(post_id: str, created_at: str, content: str) -> dict:
+        return {
+            "id": post_id,
+            "created_at": created_at,
+            "content": f"<p>{content}</p>",
+            "url": f"https://example.com/@test/{post_id}",
+            "media_attachments": [],
+            "tags": [],
+            "sensitive": False,
+            "spoiler_text": "",
+            "visibility": "public",
+            "reblogs_count": 0,
+            "favourites_count": 0,
+            "replies_count": 0,
+            "emojis": [],
+            "in_reply_to_id": None,
+            "in_reply_to_account_id": None,
+            "account": {
+                "id": "1",
+                "username": "test",
+                "display_name": "Test User",
+                "avatar": "https://example.com/avatar.png",
+                "url": "https://example.com/@test",
+                "note": "Test bio",
+                "header": "",
+                "followers_count": 5,
+                "following_count": 3,
+            },
+        }
+
+    return _make_post

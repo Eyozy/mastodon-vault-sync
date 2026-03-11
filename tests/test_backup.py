@@ -164,3 +164,52 @@ async def test_download_all_media_limits_concurrency(tmp_path, monkeypatch):
 
     assert len(media_file_map) == len(media_items)
     assert max_active <= MEDIA_DOWNLOAD_CONCURRENCY
+
+
+@pytest.mark.asyncio
+async def test_download_media_retries_transient_errors(tmp_path):
+    """媒体下载遇到临时错误时应重试"""
+    from src.backup import download_media
+
+    attempts = 0
+    media_item = {"id": "1", "url": "https://example.com/image.png"}
+
+    class FakeContent:
+        def __init__(self):
+            self._sent = False
+
+        async def read(self, chunk_size):
+            _ = chunk_size
+            if self._sent:
+                return b""
+            self._sent = True
+            return b"data"
+
+    class FakeResponse:
+        def __init__(self):
+            self.content = FakeContent()
+
+        def raise_for_status(self):
+            return None
+
+    class FakeRequest:
+        async def __aenter__(self):
+            nonlocal attempts
+            attempts += 1
+            if attempts < 3:
+                raise RuntimeError("temporary download error")
+            return FakeResponse()
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    class FakeSession:
+        def get(self, url):
+            _ = url
+            return FakeRequest()
+
+    filename = await download_media(FakeSession(), media_item, tmp_path)
+
+    assert filename == "1-image.png"
+    assert attempts == 3
+    assert (tmp_path / "1-image.png").read_bytes() == b"data"

@@ -12,6 +12,32 @@ from .utils import parse_rate_limit_reset
 POSTS_PER_REQUEST = 40  # 每次请求的最大帖子数量 (Mastodon API 限制)
 RATE_LIMIT_THRESHOLD = 10  # 速率限制安全阈值，低于此值时触发等待
 DEFAULT_WAIT_TIME = 300  # 默认等待时间（秒），当无法解析速率限制重置时间时使用
+REQUEST_RETRY_ATTEMPTS = 3
+RETRY_BASE_DELAY_SECONDS = 1
+
+
+async def _fetch_posts_page(
+    session: aiohttp.ClientSession,
+    api_url: str,
+    headers: Dict[str, str],
+    params: Dict[str, Any],
+) -> tuple[List[Dict[str, Any]], "aiohttp.typedefs.LooseHeaders"]:
+    for attempt in range(1, REQUEST_RETRY_ATTEMPTS + 1):
+        try:
+            async with session.get(api_url, headers=headers, params=params) as response:
+                response.raise_for_status()
+                posts = await response.json()
+                return posts, response.headers
+        except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
+            if attempt == REQUEST_RETRY_ATTEMPTS:
+                raise
+            wait_time = RETRY_BASE_DELAY_SECONDS * attempt
+            logging.warning(
+                f"⚠️ API 请求失败，第 {attempt} 次重试前等待 {wait_time} 秒：{exc}"
+            )
+            await asyncio.sleep(wait_time)
+
+    return [], {}
 
 
 async def fetch_mastodon_posts(
@@ -73,28 +99,25 @@ async def fetch_mastodon_posts(
                     f"📄 正在获取第 {page_count} 页...（window: {requests_in_window}/300）"
                 )
 
-                async with session.get(
-                    api_url, headers=headers, params=params
-                ) as response:
-                    response.raise_for_status()
+                posts, response_headers = await _fetch_posts_page(
+                    session, api_url, headers, params
+                )
 
-                    # 检查 API 返回的速率限制头
-                    rate_limit_remaining = int(
-                        response.headers.get("X-RateLimit-Remaining", 0)
-                    )
+                # 检查 API 返回的速率限制头
+                rate_limit_remaining = int(
+                    response_headers.get("X-RateLimit-Remaining", 0)
+                )
 
-                    # 解析 X-RateLimit-Reset 时间戳
-                    reset_header = response.headers.get("X-RateLimit-Reset", "0")
-                    rate_limit_reset = parse_rate_limit_reset(reset_header)
+                # 解析 X-RateLimit-Reset 时间戳
+                reset_header = response_headers.get("X-RateLimit-Reset", "0")
+                rate_limit_reset = parse_rate_limit_reset(reset_header)
 
-                    # 如果解析失败，使用默认值
-                    if rate_limit_reset is None:
-                        rate_limit_reset = int(time.time()) + DEFAULT_WAIT_TIME
+                # 如果解析失败，使用默认值
+                if rate_limit_reset is None:
+                    rate_limit_reset = int(time.time()) + DEFAULT_WAIT_TIME
 
-                    posts = await response.json()
-
-                    # 获取 Link header 用于分页
-                    link_header = response.headers.get("Link", "")
+                # 获取 Link header 用于分页
+                link_header = response_headers.get("Link", "")
 
                 if not posts:
                     break

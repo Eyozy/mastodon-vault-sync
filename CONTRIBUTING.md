@@ -57,6 +57,7 @@ python3 -m pre_commit install
 
 # 6. macOS / Linux: 验证安装
 python3 -m pre_commit run --all-files
+python3 -m pytest tests/test_sync_flow.py tests/test_cleanup_flow.py -v
 python3 -m pytest tests/ -v
 ```
 
@@ -67,6 +68,7 @@ py -m pre_commit install
 
 # 6. Windows: 验证安装
 py -m pre_commit run --all-files
+py -m pytest tests/test_sync_flow.py tests/test_cleanup_flow.py -v
 py -m pytest tests/ -v
 ```
 
@@ -107,6 +109,7 @@ git checkout -b feature/功能名称
 
 # 4. 运行检查和测试
 python3 -m pre_commit run --all-files
+python3 -m pytest tests/test_sync_flow.py tests/test_cleanup_flow.py -v
 python3 -m pytest tests/ -v
 
 # 5. 提交更改
@@ -149,6 +152,7 @@ GitHub 已自动识别以下协作模板：
 - **isort** - import 排序
 - **flake8** - 代码质量检查（行长度 150）
 - **pre-commit** - 提交前自动检查
+- **pytest smoke tests** - 流程级同步与 cleanup 校验
 
 提交时会自动运行检查，如有问题会自动修复或提示。
 

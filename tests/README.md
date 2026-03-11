@@ -39,6 +39,9 @@ python3 -m pytest tests/ -v
 
 # macOS / Linux: 显示详细输出(包括 print 语句)
 python3 -m pytest tests/ -v -s
+
+# macOS / Linux: 仅运行流程级 smoke tests
+python3 -m pytest tests/test_sync_flow.py tests/test_cleanup_flow.py -v
 ```
 
 ```powershell
@@ -47,6 +50,9 @@ py -m pytest tests/ -v
 
 # Windows: 显示详细输出(包括 print 语句)
 py -m pytest tests/ -v -s
+
+# Windows: 仅运行流程级 smoke tests
+py -m pytest tests/test_sync_flow.py tests/test_cleanup_flow.py -v
 ```
 
 如果你的 Windows 环境没有 `py` 命令，可以改用 `python -m pytest ...`。
@@ -58,6 +64,7 @@ py -m pytest tests/ -v -s
 - ✅ 配置结构完整性检查
 - ✅ `sync_state.json` 与 GitHub Actions 增量同步约束
 - ✅ 归档重建、HTML 输出安全和 CLI 入口行为
+- ✅ 端到端同步流程与 cleanup 流程 smoke tests
 
 ## 关于 `sync_state.json`
 
