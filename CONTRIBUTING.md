@@ -123,6 +123,12 @@ git push origin 分支名称
 
 Windows 用户可将上面的 `python3 -m ...` 改为 `py -m ...`；如果你的环境没有 `py`，再改用 `python -m ...`。
 
+### 关于 `sync_state.json`
+
+- `sync_state.json` 是仓库内受版本控制的同步状态文件，GitHub Actions 依赖它实现真正的增量同步
+- 本地调试时如果你不想让它进入 `git status`，请使用本机私有规则 `.git/info/exclude`
+- 不要把它重新加入项目级 `.gitignore`，否则自动化会退化成反复从头抓取历史数据
+
 GitHub 已自动识别以下协作模板：
 - `.github/pull_request_template.md`
 - `.github/ISSUE_TEMPLATE/bug_report.md`

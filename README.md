@@ -55,7 +55,7 @@ mastodon-vault-sync/
 ├── .pre-commit-config.yaml    # 代码检查配置
 ├── .flake8                    # Flake8 配置
 ├── archive.md                 # (生成) 汇总归档文件
-├── sync_state.json            # (生成) 同步状态
+├── sync_state.json            # (生成) 增量同步状态文件
 ├── mastodon/                  # (生成) 单帖备份目录
 ├── media/                     # (生成) 媒体文件目录
 └── index.html                 # (生成) 可浏览的网页界面
@@ -309,7 +309,14 @@ python main.py help
 3. 点击 **Run workflow**
 4. 首次运行建议勾选 `force_full_sync`
 5. 等待任务完成后，检查仓库里是否出现 `archive.md`、`README.md`、`index.html`、`mastodon/`、`media/`
-6. 首次运行完成后，系统将自动按定时规则执行增量同步
+6. 首次运行完成后，系统会把 `sync_state.json` 一起提交到仓库，后续定时任务才能真正按增量同步执行
+
+### 关于 `sync_state.json`
+
+- `sync_state.json` 是同步状态文件，用来记录最近一次成功同步到的帖子 ID
+- GitHub Actions 需要跟踪这个文件，才能在下一次运行时只抓取新增内容
+- 如果你在本地开发时不想提交它，不要重新把它写回项目级 `.gitignore`
+- 更合适的做法是把它加到你本机的 `.git/info/exclude`
 
 ## 🗑️ 清理已删除的帖子
 

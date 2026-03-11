@@ -51,6 +51,8 @@ def test_readme_documents_runtime_and_dev_installation():
     assert "requirements-dev.txt" in content
     assert "python3 -m pytest tests/ -v" in content
     assert "py -m pytest tests/ -v" in content
+    assert "sync_state.json" in content
+    assert ".git/info/exclude" in content
 
 
 def test_contributing_documents_dev_requirements_and_templates():
@@ -59,6 +61,8 @@ def test_contributing_documents_dev_requirements_and_templates():
     assert "requirements-dev.txt" in content
     assert "python3 -m pre_commit run --all-files" in content
     assert "python3 -m pytest tests/ -v" in content
+    assert "sync_state.json" in content
+    assert ".git/info/exclude" in content
 
 
 def test_tests_readme_documents_dev_requirements():
@@ -66,3 +70,20 @@ def test_tests_readme_documents_dev_requirements():
     content = read_text("tests/README.md")
     assert "requirements-dev.txt" in content
     assert "python3 -m pytest tests/ -v" in content
+    assert "sync_state.json" in content
+
+
+def test_gitignore_tracks_sync_state_file_for_actions_incremental_sync():
+    """.gitignore 不应继续忽略 workflow 的状态文件"""
+    content = read_text(".gitignore")
+    lines = [line.strip() for line in content.splitlines()]
+    assert "sync_state.json" not in lines
+    assert "# sync_state.json" in lines
+    assert ".worktrees/" in lines
+
+
+def test_cleanup_workflow_uses_current_action_versions():
+    """cleanup workflow 应与其他 workflow 使用一致的 action 主版本"""
+    content = read_text(".github/workflows/cleanup.yml")
+    assert "actions/checkout@v4" in content
+    assert "actions/setup-python@v5" in content

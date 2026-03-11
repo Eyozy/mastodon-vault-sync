@@ -56,6 +56,14 @@ py -m pytest tests/ -v -s
 当前测试覆盖：
 - ✅ 配置验证（有效配置、缺少字段、无效 URL）
 - ✅ 配置结构完整性检查
+- ✅ `sync_state.json` 与 GitHub Actions 增量同步约束
+- ✅ 归档重建、HTML 输出安全和 CLI 入口行为
+
+## 关于 `sync_state.json`
+
+- `sync_state.json` 是增量同步的状态文件，项目默认需要跟踪它
+- 如果你只是在本地跑测试或调试，不想提交这个文件，请使用 `.git/info/exclude`
+- 不要把它重新写进项目级 `.gitignore`
 
 ## 贡献者指南
 

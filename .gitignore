@@ -30,10 +30,10 @@ htmlcov/
 # 忽略系统文件
 .DS_Store
 Thumbs.db
-.worktree
+.worktrees/
 
 # 使用 GitHub Actions 部署请删除下面这行
-sync_state.json
+# sync_state.json
 
 # 忽略 Claude 配置
 .claude

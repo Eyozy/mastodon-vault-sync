@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import base64
+import html
 import json
 import logging
 import re
@@ -14,6 +15,8 @@ import yaml
 from markdownify import markdownify as md
 
 from .utils import get_color_from_count, get_timezone_aware_datetime
+
+REMOTE_ASSET_TIMEOUT = 10
 
 
 def strip_autolinks(text: str) -> str:
@@ -72,6 +75,18 @@ def get_default_css() -> str:
     """
 
 
+def _strip_html_tags(value: str) -> str:
+    return re.sub(r"<[^<]+?>", "", value).strip()
+
+
+def _escape_text(value: Any) -> str:
+    return html.escape(str(value), quote=True)
+
+
+def _serialize_posts_json(posts_data: List[Dict[str, Any]]) -> str:
+    return json.dumps(posts_data, ensure_ascii=False).replace("</", "<\\/")
+
+
 def format_single_post_for_archive(
     post: Dict[str, Any],
     media_folder_name: str,
@@ -106,18 +121,19 @@ def format_post_for_single_file(
     china_timezone: bool = False,
 ) -> str:
     local_dt = get_timezone_aware_datetime(post["created_at"], china_timezone)
+    in_reply_to_id = post.get("in_reply_to_id")
     frontmatter = {
         "id": post["id"],
         "createdAt": local_dt.strftime("%Y-%m-%d %H:%M:%S"),
         "source": post["url"],
-        "type": "reply" if post["in_reply_to_id"] else "toot",
-        "tags": [f"#{tag['name']}" for tag in post["tags"]],
+        "type": "reply" if in_reply_to_id else "toot",
+        "tags": [f"#{tag['name']}" for tag in post.get("tags", [])],
     }
-    if post["in_reply_to_id"]:
+    if in_reply_to_id:
         frontmatter.update(
             {
-                "inReplyToId": post["in_reply_to_id"],
-                "inReplyToAccountId": post["in_reply_to_account_id"],
+                "inReplyToId": in_reply_to_id,
+                "inReplyToAccountId": post.get("in_reply_to_account_id"),
             }
         )
     yaml_frontmatter = "---\n" + yaml.dump(frontmatter, allow_unicode=True) + "---\n\n"
@@ -396,7 +412,9 @@ def generate_mastodon_html(
 
             # 下载背景图片
             try:
-                header_response = requests.get(header, stream=True)
+                header_response = requests.get(
+                    header, stream=True, timeout=REMOTE_ASSET_TIMEOUT
+                )
                 if header_response.status_code == 200:
                     header_path = backup_path / media_folder / header_filename
                     header_path.parent.mkdir(exist_ok=True)
@@ -418,6 +436,7 @@ def generate_mastodon_html(
         user_id = "unknown"
         instance_name = ""
         background_image = ""
+        user_bio = ""
 
     # 提取统计数据
     total_posts = len(posts)
@@ -457,7 +476,9 @@ def generate_mastodon_html(
             if shortcode and static_url:
                 # 下载 emoji 图片并转换为 base64
                 try:
-                    emoji_response = requests.get(static_url, timeout=10)
+                    emoji_response = requests.get(
+                        static_url, timeout=REMOTE_ASSET_TIMEOUT
+                    )
                     if emoji_response.status_code == 200:
                         emoji_base64 = base64.b64encode(emoji_response.content).decode(
                             "utf-8"
@@ -549,9 +570,14 @@ def get_html_body_template(
     following_count: int,
 ) -> str:
     """生成 HTML body 内容（带用户数据）"""
+    escaped_avatar = _escape_text(avatar)
+    escaped_display_name = _escape_text(display_name)
+    escaped_username = _escape_text(username)
+    escaped_instance_name = _escape_text(instance_name)
+
     # 处理背景图片
     bg_style = (
-        f' style="background-image: url({background_image})"'
+        f" style=\"background-image: url('{_escape_text(background_image)}')\""
         if background_image
         else ""
     )
@@ -594,10 +620,10 @@ def get_html_body_template(
     <div class="user-profile">
         <div class="profile-header"{bg_style}></div>
         <div class="profile-info">
-            <img src="{avatar}" alt="{display_name}" class="user-avatar" onerror="this.style.display='none'">
+            <img src="{escaped_avatar}" alt="{escaped_display_name}" class="user-avatar" onerror="this.style.display='none'">
             <div class="profile-text">
-                <h1 class="user-name">{display_name}</h1>
-                <div class="user-handle">@{username}@{instance_name}</div>
+                <h1 class="user-name">{escaped_display_name}</h1>
+                <div class="user-handle">@{escaped_username}@{escaped_instance_name}</div>
             </div>
             <div class="user-stats">
                 <div class="stat-item">
@@ -659,9 +685,11 @@ def generate_html_template(
     user_bio: str,
 ) -> str:
     """生成完整的 HTML 页面"""
-
-    # 将 posts_data 转换为 JSON 字符串
-    posts_json = json.dumps(posts_data, ensure_ascii=False)
+    posts_json = _serialize_posts_json(posts_data)
+    clean_bio = _escape_text(_strip_html_tags(user_bio)[:160])
+    escaped_username = _escape_text(username)
+    escaped_instance_name = _escape_text(instance_name)
+    escaped_avatar = _escape_text(avatar)
 
     # 提取的资源
     css_content = load_css_styles()
@@ -685,20 +713,21 @@ def generate_html_template(
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>@{username}的 Mastodon 备份</title>
-    <meta name="description" content="{re.sub(r'<[^<]+?>', '', user_bio).strip()[:160]}">
-    <meta property="og:title" content="@{username}@{instance_name}">
-    <meta property="og:description" content="{re.sub(r'<[^<]+?>', '', user_bio).strip()[:160]}">
+    <title>@{escaped_username}的 Mastodon 备份</title>
+    <meta name="description" content="{clean_bio}">
+    <meta property="og:title" content="@{escaped_username}@{escaped_instance_name}">
+    <meta property="og:description" content="{clean_bio}">
     <meta property="og:type" content="profile">
-    <link rel="icon" type="image/png" href="{avatar}">
+    <link rel="icon" type="image/png" href="{escaped_avatar}">
     <style>
 {css_content}
     </style>
 </head>
 <body>
 {html_body}
+    <script id="posts-data" type="application/json">{posts_json}</script>
     <script>
-        const postsData = {posts_json};
+        const postsData = JSON.parse(document.getElementById("posts-data").textContent);
 
 {js_content}
     </script>

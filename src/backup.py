@@ -1,17 +1,21 @@
 # -*- coding: utf-8 -*-
+import asyncio
 import logging
-import re
 from collections import defaultdict
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
 
 import aiofiles
 import aiohttp
+import yaml
 from tqdm.asyncio import tqdm_asyncio
 
-from .render import format_post_for_single_file, format_single_post_for_archive
+from .render import format_post_for_single_file
 from .utils import get_timezone_aware_datetime
+
+MEDIA_DOWNLOAD_CONCURRENCY = 8
 
 
 async def download_media(
@@ -76,11 +80,16 @@ async def download_all_media(
 
     # 创建带 SSL 验证的 connector，防止中间人攻击
     connector = aiohttp.TCPConnector(ssl=True)
+    semaphore = asyncio.Semaphore(MEDIA_DOWNLOAD_CONCURRENCY)
+
+    async def download_with_limit(
+        session: aiohttp.ClientSession, media_item: Dict[str, Any]
+    ) -> Optional[str]:
+        async with semaphore:
+            return await download_media(session, media_item, media_folder_path)
+
     async with aiohttp.ClientSession(connector=connector) as session:
-        tasks = []
-        for media in media_items:
-            task = download_media(session, media, media_folder_path)
-            tasks.append(task)
+        tasks = [download_with_limit(session, media_item) for media_item in media_items]
 
         # 使用 tqdm 显示下载进度
         results = await tqdm_asyncio.gather(*tasks, desc="Downloading Media")
@@ -92,61 +101,134 @@ async def download_all_media(
     return media_file_map
 
 
+def _build_archive_entry_from_post_file(
+    post_file_path: Path, media_folder_name: str
+) -> Optional[Dict[str, Any]]:
+    try:
+        content = post_file_path.read_text(encoding="utf-8")
+    except OSError as exc:
+        logging.error(f"❌ 读取帖子文件失败 {post_file_path.name}: {exc}")
+        return None
+
+    parts = content.split("---", 2)
+    if len(parts) < 3:
+        logging.warning(
+            f"⚠️ 帖子文件 frontmatter 格式无效，已跳过：{post_file_path.name}"
+        )
+        return None
+
+    try:
+        frontmatter = yaml.safe_load(parts[1]) or {}
+        created_at = datetime.strptime(frontmatter["createdAt"], "%Y-%m-%d %H:%M:%S")
+    except (KeyError, TypeError, ValueError, yaml.YAMLError) as exc:
+        logging.warning(f"⚠️ 无法解析帖子文件 {post_file_path.name}: {exc}")
+        return None
+
+    body = parts[2].strip()
+    body = body.replace("../media/", f"{media_folder_name}/")
+    body = body.replace("\n## 附件\n", "\n\n", 1)
+
+    post_type = frontmatter.get("type", "toot")
+    is_reply = post_type == "reply"
+    icon = "💬" if is_reply else "📝"
+    label = "回复" if is_reply else "嘟文"
+    source_label = "**回复嘟文**" if is_reply else "**原始嘟文**"
+    source_url = frontmatter.get("source", "")
+
+    archive_content = (
+        f"## {created_at.strftime('%H:%M')} {icon} {label}\n\n"
+        f"**内容**：{body}\n\n"
+        f"{source_label}：{source_url}\n\n---"
+    )
+    return {
+        "date": created_at.strftime("%Y-%m-%d"),
+        "created_at": created_at,
+        "content": archive_content,
+    }
+
+
+def _rebuild_archive_from_post_files(
+    posts_folder_path: Path, archive_file_path: Path, media_folder_name: str
+) -> None:
+    rebuilt_posts_by_day = defaultdict(list)
+
+    for post_file_path in sorted(posts_folder_path.glob("*.md")):
+        archive_entry = _build_archive_entry_from_post_file(
+            post_file_path, media_folder_name
+        )
+        if archive_entry is None:
+            continue
+        rebuilt_posts_by_day[archive_entry["date"]].append(archive_entry)
+
+    final_content = ""
+    for date_str in sorted(rebuilt_posts_by_day.keys(), reverse=True):
+        final_content += f"# {date_str}\n\n"
+        day_posts = sorted(
+            rebuilt_posts_by_day[date_str],
+            key=lambda post: post["created_at"],
+            reverse=True,
+        )
+        final_content += "\n\n".join(post["content"] for post in day_posts) + "\n\n"
+
+    archive_file_path.write_text(final_content, encoding="utf-8")
+
+
+def _sync_posts_for_archive(
+    posts_to_update: List[Dict[str, Any]],
+    posts_folder_path: Path,
+    backup_config: Dict[str, Any],
+    sync_config: Dict[str, Any],
+    media_file_map: Dict[str, str],
+) -> None:
+    posts_folder_path.mkdir(parents=True, exist_ok=True)
+
+    for post in posts_to_update:
+        local_dt = get_timezone_aware_datetime(
+            post["created_at"], sync_config["china_timezone"]
+        )
+        filename = f"{local_dt.strftime('%Y-%m-%d_%H%M%S')}_{post['id']}.md"
+        file_path = posts_folder_path / filename
+        new_content = format_post_for_single_file(
+            post,
+            backup_config["media_folder"],
+            media_file_map,
+            sync_config["china_timezone"],
+        )
+        if file_path.exists():
+            try:
+                existing_content = file_path.read_text(encoding="utf-8")
+                if existing_content == new_content:
+                    continue
+            except OSError:
+                pass
+        file_path.write_text(new_content, encoding="utf-8")
+
+
 def update_archive_file(
     posts_to_update: List[Dict[str, Any]],
     config: Dict[str, Any],
     all_posts_from_server: List[Dict[str, Any]],
     backup_path: Path,
 ) -> None:
-    # 归档文件更新依然是文件 IO 密集型，且需要保持顺序，暂保持同步或放入线程池
-    # 为简单起见，这里保持同步，因为它只处理文本追加
     backup_config = config["backup"]
-    media_folder_name, archive_filename = (
-        backup_config["media_folder"],
-        backup_config["filename"],
-    )
+    media_folder_name = backup_config["media_folder"]
+    archive_filename = backup_config["filename"]
+    posts_folder_name = backup_config.get("posts_folder", "mastodon")
     archive_file_path = backup_path / archive_filename
-    existing_posts_by_id = {}
-    if archive_file_path.exists():
-        with open(archive_file_path, "r", encoding="utf-8") as f:
-            content = f.read()
-        for block in content.split("---\n"):
-            if block.strip() and (
-                match := re.search(r"https://[^\/]+\/[^\/]+\/(\d+)", block)
-            ):
-                existing_posts_by_id[match.group(1)] = block
-    for post in posts_to_update:
-        existing_posts_by_id[post["id"]] = format_single_post_for_archive(
-            post,
-            media_folder_name,
-            config["media_file_map"],
-            config["sync"]["china_timezone"],
-        ).strip()
+    posts_folder_path = backup_path / posts_folder_name
 
-    # 编辑检测范围
-    logging.info("📝 编辑检测范围：最近 200 条帖子，覆盖约 1-2 周内的编辑更新")
-    rebuilt_posts_by_day = defaultdict(list)
-    all_posts_dict = {p["id"]: p for p in all_posts_from_server}
-
-    for post_id, content in existing_posts_by_id.items():
-        if post_data := all_posts_dict.get(post_id):
-            local_dt = get_timezone_aware_datetime(
-                post_data["created_at"], config["sync"]["china_timezone"]
-            )
-            rebuilt_posts_by_day[local_dt.strftime("%Y-%m-%d")].append(
-                {"content": content, "created_at": post_data["created_at"]}
-            )
-
-    final_content = ""
-    for date_str in sorted(rebuilt_posts_by_day.keys(), reverse=True):
-        final_content += f"# {date_str}\n\n"
-        day_posts = sorted(
-            rebuilt_posts_by_day[date_str], key=lambda p: p["created_at"], reverse=True
-        )
-        final_content += "\n".join([p["content"] for p in day_posts]) + "\n\n"
-
-    with open(archive_file_path, "w", encoding="utf-8") as f:
-        f.write(final_content)
+    _ = all_posts_from_server
+    _sync_posts_for_archive(
+        posts_to_update,
+        posts_folder_path,
+        backup_config,
+        config["sync"],
+        config.get("media_file_map", {}),
+    )
+    logging.info("📝 正在基于本地单帖文件重建归档，确保增量同步不丢历史...")
+    _rebuild_archive_from_post_files(
+        posts_folder_path, archive_file_path, media_folder_name
+    )
     logging.info(f"✍️  已更新归档文件：{archive_file_path}")
 
 
@@ -172,10 +254,6 @@ async def save_posts(
     )
     config["media_file_map"] = media_file_map
 
-    # 更新归档文件（同步操作）
-    update_archive_file(posts, config, all_posts_from_server, backup_path)
-
-    # 异步写入单条帖子文件
     posts_folder_path.mkdir(parents=True, exist_ok=True)
 
     logging.info(f"📄 正在写入 {len(posts)} 个帖子文件...")
@@ -212,6 +290,9 @@ async def save_posts(
                 # logging.info(f"📄 已备份/更新：{filename}") # 减少日志输出，避免刷屏
             except IOError as e:
                 logging.error(f"❌ 无法写入文件 {file_path}: {e}")
+
+    # 所有单帖文件落盘后，再统一重建归档文件
+    update_archive_file(posts, config, all_posts_from_server, backup_path)
 
     logging.info("✅ 所有帖子文件写入完成")
 
