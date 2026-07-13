@@ -91,7 +91,7 @@ async def fetch_mastodon_posts(
                         window_start_time = time.time()
 
                 # 每获取 100 页显示一次进度报告
-                if page_count % 100 == 0 or page_count % 25 == 1:
+                if all_posts and (page_count % 100 == 0 or page_count % 25 == 1):
                     logging.info(
                         f"📊 进度报告：已获取 {len(all_posts)} 条帖子，共 {page_count} 页"
                     )
@@ -167,5 +167,17 @@ async def fetch_mastodon_posts(
                 return []
 
     all_posts.reverse()
+    if since_id:
+        logging.info(
+            f"✅ 新帖子接口返回 {len(all_posts)} 条，共调用 {page_count-1} 次 API"
+        )
+        return all_posts
+
+    if page_limit:
+        logging.info(
+            f"✅ 最近帖子接口返回 {len(all_posts)} 条，共调用 {page_count-1} 次 API"
+        )
+        return all_posts
+
     logging.info(f"✅ 成功获取 {len(all_posts)} 条帖子，共调用 {page_count-1} 次 API")
     return all_posts

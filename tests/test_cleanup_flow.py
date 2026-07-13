@@ -35,14 +35,19 @@ async def test_cleanup_removes_deleted_posts_and_stale_media(
     post_b = make_post("101", "2024-01-02T10:00:00.000Z", "第二条")
     post_c = make_post("102", "2024-01-03T10:00:00.000Z", "第三条")
 
-    await save_posts(
-        [post_a, post_b, post_c], config, [post_a, post_b, post_c], backup_path
-    )
+    await save_posts([post_a, post_b, post_c], config, backup_path)
     state_file.write_text(json.dumps({"last_synced_id": "102"}), encoding="utf-8")
 
     stale_media = backup_path / "media" / "stale.bin"
     stale_media.parent.mkdir(parents=True, exist_ok=True)
     stale_media.write_bytes(b"stale")
+    referenced_media = backup_path / "media" / "1-kept.png"
+    referenced_media.write_bytes(b"kept")
+    post_a_file = next((backup_path / "mastodon").glob("*100.md"))
+    post_a_file.write_text(
+        post_a_file.read_text(encoding="utf-8") + "\n![附件](../media/1-kept.png)\n",
+        encoding="utf-8",
+    )
 
     async def fake_fetch(config, since_id=None, page_limit=None, max_posts=None):
         _ = config, since_id, page_limit, max_posts
@@ -64,4 +69,5 @@ async def test_cleanup_removes_deleted_posts_and_stale_media(
     assert "第三条" in archive_content
     assert "第二条" not in archive_content
     assert not stale_media.exists()
+    assert referenced_media.exists()
     assert json.loads(state_file.read_text(encoding="utf-8"))["last_synced_id"] == "102"

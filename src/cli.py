@@ -5,13 +5,17 @@ import json
 import sys
 from pathlib import Path
 
-import colorama
-
 from src import __version__
-from src.config import get_config
 
-# 初始化 colorama 以支持 Windows 终端颜色
-colorama.init(autoreset=True)
+try:
+    import colorama
+except ImportError:
+    colorama = None
+
+if colorama:
+    colorama.init(autoreset=True)
+
+PYTHON_COMMAND = "python" if sys.platform.startswith("win") else "python3"
 
 
 def init_config():
@@ -82,7 +86,7 @@ sync:
         config_path.write_text(config_content, encoding="utf-8")
         print(f"\n✅ 配置已保存到：{config_path.resolve()}")
         print("\n下一步运行：")
-        print("  python main.py sync")
+        print(f"  {PYTHON_COMMAND} main.py sync")
     except Exception as e:
         print(f"\n❌ 保存配置失败：{e}")
 
@@ -96,19 +100,19 @@ def check_config():
     if not config_path.exists():
         print("❌ 配置文件不存在：config.yaml")
         print("\n请运行以下命令创建配置：")
-        print("  python main.py init")
+        print(f"  {PYTHON_COMMAND} main.py init")
         return
 
     print("✅ 配置文件：config.yaml 存在")
 
     # 加载并验证配置（get_config 内部已调用 validate_config）
     try:
+        from src.config import get_config
+
         config = get_config()
         print("✅ 配置格式：正确")
     except Exception as e:
-        print(f"❌ 配置错误：{e}")
-        print("\n请检查配置文件或重新运行：")
-        print("  python main.py init")
+        print_config_error(e)
         return
 
     # 显示配置信息
@@ -119,9 +123,38 @@ def check_config():
     print(f"✅ 实例地址：{instance_url}")
     print(f"✅ 用户 ID: {user_id}")
     print(f"✅ 备份路径：{backup_path.resolve()}")
+    if is_cloud_storage_path(backup_path):
+        print("⚠️  检测到云盘路径；如遇权限错误，请确认 OneDrive/Obsidian 未占用该目录")
 
     print("\n🎉 配置正确！可以开始同步了")
-    print("  python main.py sync")
+    print(f"  {PYTHON_COMMAND} main.py sync")
+
+
+def is_cloud_storage_path(path):
+    """判断路径是否位于常见云盘同步目录"""
+    path_text = str(path.expanduser())
+    return any(
+        marker in path_text
+        for marker in ("CloudStorage", "OneDrive", "iCloud", "Dropbox")
+    )
+
+
+def print_cloud_storage_hint(path):
+    print(f"⚠️  无法访问：{path}")
+    print("   这通常是云盘同步、Obsidian、Finder 或 macOS 权限限制导致的。")
+    print("   建议先关闭占用该目录的程序，或把备份路径换到普通本地目录后重试。")
+
+
+def print_config_error(error):
+    print(f"❌ 配置检查失败：{error}")
+    if isinstance(error, ModuleNotFoundError):
+        print("\n这不是 config.yaml 写错，更像是当前 Python 环境依赖损坏或未安装。")
+        print("请优先使用项目虚拟环境运行：")
+        print("  venv/bin/python main.py")
+        return
+
+    print("\n请检查配置文件或重新运行：")
+    print(f"  {PYTHON_COMMAND} main.py init")
 
 
 def show_status():
@@ -129,6 +162,8 @@ def show_status():
     print("📊 同步状态\n")
 
     try:
+        from src.config import get_config
+
         config = get_config()
         state_file = Path(config["sync"]["state_file"])
     except Exception:
@@ -138,7 +173,7 @@ def show_status():
     if not state_file.exists():
         print("⚠️  尚未进行过同步")
         print("\n运行以下命令开始首次同步：")
-        print("  python main.py sync --full")
+        print(f"  {PYTHON_COMMAND} main.py sync --full")
         return
 
     try:
@@ -146,27 +181,40 @@ def show_status():
         last_id = state.get("last_synced_id", "N/A")
         print(f"上次同步 ID: {last_id}")
 
-        # 统计备份文件（只在配置加载成功时执行）
-        if config:
-            backup_path = Path(config["backup"]["path"])
-            posts_folder = backup_path / config["backup"]["posts_folder"]
-
-            if posts_folder.exists():
-                post_count = sum(1 for _ in posts_folder.glob("*.md"))
-                print(f"帖子总数：{post_count} 条")
-
-            media_folder = backup_path / config["backup"]["media_folder"]
-            if media_folder.exists():
-                media_count = 0
-                media_size = 0
-                for f in media_folder.iterdir():
-                    if f.is_file():
-                        media_count += 1
-                        media_size += f.stat().st_size
-                print(f"媒体文件：{media_count} 个 ({media_size / 1024 / 1024:.1f} MB)")
-
     except Exception as e:
         print(f"❌ 读取状态失败：{e}")
+        return
+
+    if not config:
+        return
+
+    backup_path = Path(config["backup"]["path"])
+    posts_folder = backup_path / config["backup"]["posts_folder"]
+    media_folder = backup_path / config["backup"]["media_folder"]
+
+    try:
+        post_count = (
+            sum(1 for _ in posts_folder.glob("*.md")) if posts_folder.exists() else 0
+        )
+        print(f"帖子总数：{post_count} 条")
+    except PermissionError:
+        print_cloud_storage_hint(posts_folder)
+    except OSError as e:
+        print(f"⚠️  无法读取帖子目录：{e}")
+
+    try:
+        media_count = 0
+        media_size = 0
+        if media_folder.exists():
+            for f in media_folder.iterdir():
+                if f.is_file():
+                    media_count += 1
+                    media_size += f.stat().st_size
+        print(f"媒体文件：{media_count} 个 ({media_size / 1024 / 1024:.1f} MB)")
+    except PermissionError:
+        print_cloud_storage_hint(media_folder)
+    except OSError as e:
+        print(f"⚠️  无法读取媒体目录：{e}")
 
 
 def show_help():
@@ -174,9 +222,10 @@ def show_help():
     print(
         f"""Mastodon Vault Sync v{__version__}
 
-用法：python main.py <命令> [选项]
+用法：{PYTHON_COMMAND} main.py <命令> [选项]
 
 命令：
+  menu              打开交互式菜单（无参数默认进入）
   init              初始化配置
   sync              同步帖子（增量）
   sync --full       全量同步
@@ -187,24 +236,103 @@ def show_help():
   help              显示此帮助
 
 示例：
-  python main.py init          # 首次使用，创建配置
-  python main.py check         # 检查配置是否正确
-  python main.py sync --full   # 首次同步，获取所有历史帖子
-  python main.py sync          # 日常增量同步
-  python main.py status        # 查看同步状态
-  python main.py cleanup       # 清理已删除的帖子
+  {PYTHON_COMMAND} main.py               # 打开交互式菜单
+  {PYTHON_COMMAND} main.py menu          # 打开交互式菜单
+  {PYTHON_COMMAND} main.py init          # 首次使用，创建配置
+  {PYTHON_COMMAND} main.py check         # 检查配置是否正确
+  {PYTHON_COMMAND} main.py sync --full   # 首次同步，获取所有历史帖子
+  {PYTHON_COMMAND} main.py sync          # 日常增量同步
+  {PYTHON_COMMAND} main.py status        # 查看同步状态
+  {PYTHON_COMMAND} main.py cleanup       # 清理已删除的帖子
 
 更多信息：https://github.com/Eyozy/mastodon-vault-sync
 """
     )
 
 
+def run_sync(full_sync=False):
+    """执行同步"""
+    sys.argv = ["main.py", "--full-sync"] if full_sync else ["main.py"]
+    from main import main
+
+    main()
+
+
+def run_cleanup():
+    """执行清理"""
+    sys.argv = ["main.py", "--cleanup"]
+    from main import main
+
+    main()
+
+
+def show_menu():
+    """显示交互式菜单"""
+    print(f"\n{'=' * 42}")
+    print(f"  Mastodon Vault Sync v{__version__}")
+    print(f"{'=' * 42}")
+    print("请选择要执行的操作：")
+    print("  1  初始化配置")
+    print("  2  检查配置")
+    print("  3  查看同步状态")
+    print("  4  日常增量同步")
+    print("  5  首次/全量同步")
+    print("  6  清理已删除的帖子")
+    print("  7  显示帮助")
+    print("  0  退出")
+    print(f"{'-' * 42}")
+
+
+def run_menu_action(action):
+    try:
+        action()
+    except PermissionError as e:
+        print(f"\n❌ 权限错误：{e}")
+        print("   请检查备份目录是否被 OneDrive、Obsidian 或系统权限限制占用。")
+    except KeyboardInterrupt:
+        print("\n已取消当前操作")
+    except Exception as e:
+        print(f"\n❌ 操作失败：{e}")
+
+
+def interactive_menu():
+    """交互式命令菜单"""
+    actions = {
+        "1": init_config,
+        "2": check_config,
+        "3": show_status,
+        "4": lambda: run_sync(full_sync=False),
+        "5": lambda: run_sync(full_sync=True),
+        "6": run_cleanup,
+        "7": show_help,
+    }
+
+    while True:
+        show_menu()
+        choice = input("请输入选项编号: ").strip()
+
+        if choice == "0":
+            print("已退出")
+            return
+
+        action = actions.get(choice)
+        if not action:
+            print("❌ 无效选项，请重新输入\n")
+            continue
+
+        run_menu_action(action)
+        input("\n按回车键返回菜单...")
+
+
 def main_cli():
     """CLI 入口"""
     args = sys.argv[1:]
 
-    # 没有参数或请求帮助
-    if not args or args[0] in ["help", "--help", "-h"]:
+    if not args:
+        interactive_menu()
+        return
+
+    if args[0] in ["help", "--help", "-h"]:
         show_help()
         return
 
@@ -213,6 +341,8 @@ def main_cli():
     # 处理各种命令
     if command == "version":
         print(f"Mastodon Vault Sync v{__version__}")
+    elif command == "menu":
+        interactive_menu()
     elif command == "init":
         init_config()
     elif command == "check":
@@ -220,20 +350,9 @@ def main_cli():
     elif command == "status":
         show_status()
     elif command == "sync":
-        # 处理 sync 命令和参数
-        if "--full" in args:
-            sys.argv = ["main.py", "--full-sync"]
-        else:
-            sys.argv = ["main.py"]
-        from main import main
-
-        main()
+        run_sync(full_sync="--full" in args)
     elif command == "cleanup":
-        # 处理 cleanup 命令
-        sys.argv = ["main.py", "--cleanup"]
-        from main import main
-
-        main()
+        run_cleanup()
     else:
         print(f"❌ 未知命令：{command}\n")
         show_help()

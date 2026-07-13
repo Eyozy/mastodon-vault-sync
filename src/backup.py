@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import asyncio
 import logging
+import re
 from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
@@ -13,7 +14,7 @@ import yaml
 from tqdm.asyncio import tqdm_asyncio
 
 from .render import format_post_for_single_file
-from .utils import get_timezone_aware_datetime
+from .utils import get_timezone_aware_datetime, safe_remove_file
 
 MEDIA_DOWNLOAD_CONCURRENCY = 8
 MEDIA_DOWNLOAD_RETRY_ATTEMPTS = 3
@@ -131,7 +132,8 @@ def _build_archive_entry_from_post_file(
 
     try:
         frontmatter = yaml.safe_load(parts[1]) or {}
-        created_at = datetime.strptime(frontmatter["createdAt"], "%Y-%m-%d %H:%M:%S")
+        date_str = frontmatter.get("date") or frontmatter.get("createdAt")
+        created_at = datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S")
     except (KeyError, TypeError, ValueError, yaml.YAMLError) as exc:
         logging.warning(f"⚠️ 无法解析帖子文件 {post_file_path.name}: {exc}")
         return None
@@ -219,7 +221,6 @@ def _sync_posts_for_archive(
 def update_archive_file(
     posts_to_update: List[Dict[str, Any]],
     config: Dict[str, Any],
-    all_posts_from_server: List[Dict[str, Any]],
     backup_path: Path,
 ) -> None:
     backup_config = config["backup"]
@@ -229,7 +230,6 @@ def update_archive_file(
     archive_file_path = backup_path / archive_filename
     posts_folder_path = backup_path / posts_folder_name
 
-    _ = all_posts_from_server
     _sync_posts_for_archive(
         posts_to_update,
         posts_folder_path,
@@ -244,10 +244,59 @@ def update_archive_file(
     logging.info(f"✍️  已更新归档文件：{archive_file_path}")
 
 
+def cleanup_deleted_posts(
+    server_posts: List[Dict[str, Any]],
+    config: Dict[str, Any],
+    backup_path: Path,
+) -> tuple[int, int]:
+    """删除服务器已不存在的帖子和未引用媒体，并重建本地归档。"""
+    backup_config = config["backup"]
+    posts_folder_path = backup_path / backup_config["posts_folder"]
+    media_folder_path = backup_path / backup_config["media_folder"]
+    server_post_ids = {str(post["id"]) for post in server_posts}
+    deleted_posts = 0
+
+    for post_file_path in posts_folder_path.glob("*.md"):
+        post_id = post_file_path.stem.rsplit("_", 1)[-1]
+        if post_id in server_post_ids:
+            continue
+        if safe_remove_file(post_file_path):
+            deleted_posts += 1
+
+    referenced_media = set()
+    media_prefix = f"../{backup_config['media_folder']}/"
+    for post_file_path in posts_folder_path.glob("*.md"):
+        try:
+            content = post_file_path.read_text(encoding="utf-8")
+        except OSError as exc:
+            logging.warning(f"⚠️ 无法读取帖子文件，跳过媒体检查 {post_file_path}: {exc}")
+            continue
+        referenced_media.update(
+            re.findall(rf"{re.escape(media_prefix)}([^\s)]+)", content)
+        )
+
+    deleted_media = 0
+    if media_folder_path.exists():
+        for media_file_path in media_folder_path.iterdir():
+            if (
+                not media_file_path.is_file()
+                or media_file_path.name in referenced_media
+            ):
+                continue
+            if safe_remove_file(media_file_path):
+                deleted_media += 1
+
+    _rebuild_archive_from_post_files(
+        posts_folder_path,
+        backup_path / backup_config["filename"],
+        backup_config["media_folder"],
+    )
+    return deleted_posts, deleted_media
+
+
 async def save_posts(
     posts: List[Dict[str, Any]],
     config: Dict[str, Any],
-    all_posts_from_server: List[Dict[str, Any]],
     backup_path: Path,
 ) -> None:
     backup_config = config["backup"]
@@ -304,7 +353,7 @@ async def save_posts(
                 logging.error(f"❌ 无法写入文件 {file_path}: {e}")
 
     # 所有单帖文件落盘后，再统一重建归档文件
-    update_archive_file(posts, config, all_posts_from_server, backup_path)
+    update_archive_file(posts, config, backup_path)
 
     logging.info("✅ 所有帖子文件写入完成")
 

@@ -6,18 +6,32 @@ import os
 import sys
 from pathlib import Path
 
-from src.api import fetch_mastodon_posts
-from src.backup import save_posts
-from src.config import get_config, validate_config
-from src.render import generate_activity_summary, generate_mastodon_html
-from src.utils import safe_remove_directory, safe_remove_file
-
 # 设置日志
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
     stream=sys.stdout,
 )
+
+
+def get_config():
+    from src.config import get_config as load_config
+
+    return load_config()
+
+
+def validate_config(config):
+    from src.config import validate_config as validate_loaded_config
+
+    return validate_loaded_config(config)
+
+
+async def fetch_mastodon_posts(config, since_id=None, page_limit=None, max_posts=None):
+    from src.api import fetch_mastodon_posts as fetch_posts
+
+    return await fetch_posts(
+        config, since_id=since_id, page_limit=page_limit, max_posts=max_posts
+    )
 
 
 def load_runtime_config():
@@ -48,7 +62,7 @@ def resolve_sync_flags(archive_file_path):
     is_cli_full_sync = "--full" in sys.argv or "--full-sync" in sys.argv
     is_action_full_sync = os.environ.get("FORCE_FULL_SYNC") == "true"
     is_first_run = not archive_file_path.exists()
-    is_manual_full_sync = is_cli_full_sync or is_action_full_sync or is_cleanup_mode
+    is_manual_full_sync = is_cli_full_sync or is_action_full_sync
     return {
         "is_cleanup_mode": is_cleanup_mode,
         "is_first_run": is_first_run,
@@ -63,6 +77,8 @@ def cleanup_for_full_sync(
     media_folder_path,
     is_first_run,
 ):
+    from src.utils import safe_remove_directory, safe_remove_file
+
     if is_first_run:
         logging.info("🆕 检测到首次运行，将开始初始化备份...")
     else:
@@ -104,19 +120,23 @@ async def collect_posts_for_sync(config, last_synced_id, is_full_sync):
         logging.info("🔄 智能全量同步模式，将获取所有历史帖子...")
         logging.info("⚡ 系统将智能管理 API 速率限制，可能需要一些时间完成")
         posts_to_process = await fetch_mastodon_posts(config)
-        all_posts_from_server_for_sync = posts_to_process
         new_posts_count = len(posts_to_process)
         logging.info(f"📊 全量同步完成，共获取 {new_posts_count} 条历史帖子")
-        return posts_to_process, all_posts_from_server_for_sync, new_posts_count
+        return posts_to_process, new_posts_count
 
+    logging.info("🔎 正在检查上次同步后的新帖子...")
     new_posts = await fetch_mastodon_posts(config, since_id=last_synced_id)
+    logging.info(f"✅ 新帖子检查完成，发现 {len(new_posts)} 条新帖子")
+
+    logging.info("🔎 正在拉取最近 5 页帖子，用于校验本地归档和清理记录...")
     recent_posts = await fetch_mastodon_posts(config, page_limit=5)
-    all_posts_from_server_for_sync = recent_posts
+    logging.info(f"✅ 最近帖子校验数据获取完成，共 {len(recent_posts)} 条")
+
     posts_dict = {post["id"]: post for post in new_posts}
     for post in recent_posts:
         posts_dict[post["id"]] = post
     posts_to_process = sorted(posts_dict.values(), key=lambda post: post["created_at"])
-    return posts_to_process, all_posts_from_server_for_sync, len(new_posts)
+    return posts_to_process, len(new_posts)
 
 
 def write_sync_state_file(
@@ -134,6 +154,8 @@ def write_sync_state_file(
 async def generate_html_output(
     config, backup_path, backup_config, is_full_sync, new_posts_count, posts_to_process
 ):
+    from src.render import generate_mastodon_html
+
     html_filename = backup_config.get("html_filename", "index.html")
     html_filepath = backup_path / html_filename
 
@@ -224,9 +246,28 @@ async def main_async():
     config["is_full_sync"] = is_full_sync
 
     if is_cleanup_mode:
-        logging.info(
-            "🧹 检测到 cleanup 模式，将执行全量重建以清理已删除的帖子和媒体文件..."
+        from src.backup import cleanup_deleted_posts
+
+        logging.info("🧹 正在检查服务器帖子，清理本地已删除内容...")
+        server_posts = await fetch_mastodon_posts(config)
+        local_post_files = list(posts_folder_path.glob("*.md"))
+        if local_post_files and not server_posts:
+            logging.error("❌ 未获取到服务器帖子，已停止清理，避免误删本地备份。")
+            return
+
+        deleted_posts, deleted_media = cleanup_deleted_posts(
+            server_posts, config, backup_path
         )
+        logging.info(
+            f"✅ 清理完成：删除 {deleted_posts} 个帖子文件，"
+            f"删除 {deleted_media} 个媒体文件。"
+        )
+        from src.render import generate_activity_summary, generate_mastodon_html
+
+        generate_activity_summary(config, backup_path)
+        if server_posts:
+            generate_mastodon_html(server_posts, config, backup_path)
+        return
 
     if is_full_sync:
         cleanup_for_full_sync(
@@ -240,14 +281,14 @@ async def main_async():
     last_synced_id, is_full_sync = load_last_synced_id(state_file_path, is_full_sync)
     config["is_full_sync"] = is_full_sync
 
-    posts_to_process, all_posts_from_server_for_sync, new_posts_count = (
-        await collect_posts_for_sync(config, last_synced_id, is_full_sync)
+    posts_to_process, new_posts_count = await collect_posts_for_sync(
+        config, last_synced_id, is_full_sync
     )
 
     if posts_to_process:
-        await save_posts(
-            posts_to_process, config, all_posts_from_server_for_sync, backup_path
-        )
+        from src.backup import save_posts
+
+        await save_posts(posts_to_process, config, backup_path)
         write_sync_state_file(
             state_file_path, posts_to_process, last_synced_id, is_full_sync
         )
@@ -256,6 +297,8 @@ async def main_async():
 
     # 统一的活动总结更新逻辑：智能同步和全量同步都会更新统计
     if should_update_summary(is_full_sync, new_posts_count, backup_path, backup_config):
+        from src.render import generate_activity_summary
+
         if is_full_sync:
             logging.info("🔄 全量同步模式，生成活动总结...")
         else:
@@ -290,14 +333,41 @@ def main():
     asyncio.run(main_async())
 
 
+def resolve_venv_python():
+    project_root = Path(__file__).resolve().parent
+    venv_root = project_root / "venv"
+    venv_python = (
+        venv_root / "Scripts" / "python.exe"
+        if sys.platform.startswith("win")
+        else venv_root / "bin" / "python"
+    )
+    if venv_python.exists():
+        return venv_python
+    return None
+
+
+def restart_with_venv_python():
+    if os.environ.get("MASTODON_VAULT_SYNC_NO_VENV_REEXEC"):
+        return
+
+    venv_python = resolve_venv_python()
+    if not venv_python:
+        return
+
+    venv_root = venv_python.parents[1]
+    if Path(sys.prefix).resolve() == venv_root.resolve():
+        return
+
+    os.execv(
+        str(venv_python),
+        [str(venv_python), str(Path(__file__).resolve()), *sys.argv[1:]],
+    )
+
+
 if __name__ == "__main__":
+    restart_with_venv_python()
+
     # 统一使用 CLI 入口
-    if len(sys.argv) > 1:
-        from src.cli import main_cli
+    from src.cli import main_cli
 
-        main_cli()
-    else:
-        # 无参数时显示帮助
-        from src.cli import show_help
-
-        show_help()
+    main_cli()

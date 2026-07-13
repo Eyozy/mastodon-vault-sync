@@ -124,10 +124,12 @@ def format_post_for_single_file(
     in_reply_to_id = post.get("in_reply_to_id")
     frontmatter = {
         "id": post["id"],
-        "createdAt": local_dt.strftime("%Y-%m-%d %H:%M:%S"),
+        "date": local_dt.strftime("%Y-%m-%d %H:%M:%S"),
         "source": post["url"],
         "type": "reply" if in_reply_to_id else "toot",
-        "tags": [f"#{tag['name']}" for tag in post.get("tags", [])],
+        "visibility": post.get("visibility", "public"),
+        "hasMedia": bool(post.get("media_attachments", [])),
+        "tags": [tag["name"] for tag in post.get("tags", [])],
     }
     if in_reply_to_id:
         frontmatter.update(
@@ -255,7 +257,8 @@ def generate_activity_summary(config: Dict[str, Any], backup_path: Path) -> None
             all_posts.append(
                 {
                     "datetime": datetime.strptime(
-                        frontmatter["createdAt"], "%Y-%m-%d %H:%M:%S"
+                        frontmatter.get("date") or frontmatter.get("createdAt"),
+                        "%Y-%m-%d %H:%M:%S",
                     ).date(),
                     "content": parts[2].strip().replace("../media/", "./media/"),
                     "source": frontmatter.get("source", ""),

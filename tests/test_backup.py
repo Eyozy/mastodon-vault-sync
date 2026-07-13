@@ -35,7 +35,7 @@ def test_update_archive_file(tmp_path):
         "media_file_map": {},
     }
 
-    update_archive_file(posts, config, posts, backup_path)
+    update_archive_file(posts, config, backup_path)
     archive_file = backup_path / "archive.md"
     assert archive_file.exists()
     content = archive_file.read_text(encoding="utf-8")
@@ -72,7 +72,7 @@ def test_update_archive_file_with_existing(tmp_path):
         "media_file_map": {},
     }
 
-    update_archive_file(posts, config, posts, backup_path)
+    update_archive_file(posts, config, backup_path)
     content = archive_file.read_text(encoding="utf-8")
     assert "新帖子" in content
 
@@ -122,7 +122,7 @@ def test_update_archive_file_preserves_history_outside_recent_window(tmp_path):
         "media_file_map": {},
     }
 
-    update_archive_file([new_post], config, [new_post], backup_path)
+    update_archive_file([new_post], config, backup_path)
     content = (backup_path / "archive.md").read_text(encoding="utf-8")
 
     assert "旧帖子" in content
