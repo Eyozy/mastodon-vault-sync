@@ -219,8 +219,32 @@ python main.py help
 
 **提示**：
 - 在虚拟环境中，项目命令统一使用 `python main.py ...`
+- 如果不确定当前终端是否已激活虚拟环境，macOS / Linux 可直接使用 `venv/bin/python main.py ...`
 - 如果你的 Windows 环境没有 `py` 命令，可以把文档里的 `py -m ...` 改成 `python -m ...`
 - 首次运行建议使用 `sync --full` 获取完整历史记录
+
+#### 常见问题：OneDrive / iCloud / CloudStorage 路径无法写入
+
+如果备份路径位于 `~/Library/CloudStorage/...`，同步时可能遇到：
+
+```text
+PermissionError: [Errno 1] Operation not permitted
+```
+
+这通常不是项目目录权限问题，而是云盘 File Provider、OneDrive 或 Obsidian 正在占用、同步或保护已有文件。
+
+处理方式：
+
+```bash
+# 确保使用仓库虚拟环境
+venv/bin/python main.py sync
+```
+
+如果仍然失败：
+- 暂停 OneDrive 同步后重试
+- 关闭 Obsidian 后重试
+- 将 `config.yaml` 的 `backup.path` 临时改到本地普通目录验证，例如 `/Users/你的用户名/Desktop/Mastodon-test`
+- 在 macOS 系统设置中给当前终端应用授予“完整磁盘访问权限”后重试
 
 ### 方式二：GitHub Actions（自动化）
 

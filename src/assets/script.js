@@ -2,6 +2,7 @@ const POSTS_PER_PAGE = 40;
 let currentPage = 1;
 let currentPosts = [];
 let filteredPosts = [];
+let postLookup = null;
 
 document.addEventListener('DOMContentLoaded', function () {
     postsData.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
@@ -102,6 +103,8 @@ function setupPagination() {
 
 function createPostHTML(post) {
     const mediaHTML = createMediaHTML(post.media_attachments);
+    const referenceHTML = createReferenceHTML(post);
+    const contentHTML = referenceHTML ? removeReferenceLine(post.content) : post.content;
     const tagsHTML = post.tags.map(tag => `<a href="#" class="hashtag">#${tag.name}</a>`).join(' ');
     const statsHTML = `
         <span class="stat-item">
@@ -135,86 +138,133 @@ function createPostHTML(post) {
         post.content.toLowerCase().includes('re:')
     );
     const isQuote = hasRELink && !isReply;
+    const actionText = isReply ? '查看回复' : (isQuote ? '查看引用' : '查看原文');
 
-    if (isReply) {
-        return `
-            <div class="status-reply" data-id="${post.id}">
-                <div class="status-header">
-                    <img src="${post.account.avatar}" alt="${post.account.display_name}" class="status-avatar" onerror="this.style.display='none'">
-                    <div class="status-meta">
-                        <a href="${post.account.url}" class="status-name" target="_blank">${post.account.display_name}</a>
-                        <div class="status-handle">@${post.account.username}</div>
-                    </div>
-                    <div class="status-time">
-                        <div class="status-full-date">${post.created_at.split(' ')[0]}</div>
-                        <div class="status-time-detail">${post.created_at.split(' ')[1].split(':')[0]}:${post.created_at.split(' ')[1].split(':')[1]}</div>
-                    </div>
+    return `
+        <div class="status" data-id="${post.id}">
+            <div class="status-header">
+                <img src="${post.account.avatar}" alt="${post.account.display_name}" class="status-avatar" onerror="this.style.display='none'">
+                <div class="status-meta">
+                    <span class="status-name">${post.account.display_name}</span>
+                    <span class="status-handle">@${post.account.username}</span>
                 </div>
-                <div class="status-content">
-                    ${post.content}
-                </div>
-                ${mediaHTML}
-                <div class="status-footer">
-                    <div class="status-stats">
-                        ${statsHTML}
-                    </div>
-                    <a href="${post.url}" class="status-link" target="_blank">查看回复</a>
+                <div class="status-time">
+                    <div class="status-full-date">${post.created_at.split(' ')[0]}</div>
+                    <div class="status-time-detail">${post.created_at.split(' ')[1].split(':')[0]}:${post.created_at.split(' ')[1].split(':')[1]}</div>
                 </div>
             </div>
-        `;
-    } else if (isQuote) {
-        return `
-            <div class="status-quote" data-id="${post.id}">
-                <div class="status-header">
-                    <img src="${post.account.avatar}" alt="${post.account.display_name}" class="status-avatar" onerror="this.style.display='none'">
-                    <div class="status-meta">
-                        <a href="${post.account.url}" class="status-name" target="_blank">${post.account.display_name}</a>
-                        <div class="status-handle">@${post.account.username}</div>
-                    </div>
-                    <div class="status-time">
-                        <div class="status-full-date">${post.created_at.split(' ')[0]}</div>
-                        <div class="status-time-detail">${post.created_at.split(' ')[1].split(':')[0]}:${post.created_at.split(' ')[1].split(':')[1]}</div>
-                    </div>
-                </div>
-                <div class="status-content">
-                    ${post.content}
-                </div>
-                ${mediaHTML}
-                <div class="status-footer">
-                    <div class="status-stats">
-                        ${statsHTML}
-                    </div>
-                    <a href="${post.url}" class="status-link" target="_blank">查看引用</a>
-                </div>
+            <div class="status-content">
+                ${contentHTML}
             </div>
-        `;
-    } else {
-        return `
-            <div class="status" data-id="${post.id}">
-                <div class="status-header">
-                    <img src="${post.account.avatar}" alt="${post.account.display_name}" class="status-avatar" onerror="this.style.display='none'">
-                    <div class="status-meta">
-                        <a href="${post.account.url}" class="status-name" target="_blank">${post.account.display_name}</a>
-                        <div class="status-handle">@${post.account.username}</div>
-                    </div>
-                    <div class="status-time">
-                        <div class="status-full-date">${post.created_at.split(' ')[0]}</div>
-                        <div class="status-time-detail">${post.created_at.split(' ')[1].split(':')[0]}:${post.created_at.split(' ')[1].split(':')[1]}</div>
-                    </div>
+            ${mediaHTML}
+            ${referenceHTML}
+            <div class="status-footer">
+                <div class="status-stats">
+                    ${statsHTML}
                 </div>
-                <div class="status-content">
-                    ${post.content}
-                </div>
-                ${mediaHTML}
-                <div class="status-footer">
-                    <div class="status-stats">
-                        ${statsHTML}
-                    </div>
-                    <a href="${post.url}" class="status-link" target="_blank">查看原文</a>
-                </div>
+                <a href="${post.url}" class="status-link" target="_blank">${actionText}</a>
             </div>
-        `;
+        </div>
+    `;
+}
+
+function createReferenceHTML(post) {
+    const lookup = getPostLookup();
+    let label = '';
+    let referencePost = null;
+
+    if (post.in_reply_to_id) {
+        label = '回复对象';
+        referencePost = lookup.byId.get(String(post.in_reply_to_id));
     }
+
+    if (!referencePost) {
+        const referenceUrl = extractReferenceUrl(post.content);
+        if (referenceUrl) {
+            label = '引用内容';
+            referencePost = lookup.byUrl.get(normalizeUrl(referenceUrl));
+        }
+    }
+
+    if (!referencePost || referencePost.id === post.id) return '';
+
+    return createReferenceCardHTML(referencePost, label);
+}
+
+function createReferenceCardHTML(post, label) {
+    const mediaHTML = createMediaHTML(post.media_attachments);
+    const dateParts = post.created_at.split(' ');
+    const timeParts = dateParts[1].split(':');
+
+    return `
+        <div class="status-reference">
+            <div class="reference-label">${label}</div>
+            <div class="reference-header">
+                <img src="${post.account.avatar}" alt="${post.account.display_name}" class="reference-avatar" onerror="this.style.display='none'">
+                <div class="reference-meta">
+                    <span class="status-name">${post.account.display_name}</span>
+                    <span class="status-handle">@${post.account.username}</span>
+                </div>
+                <div class="reference-time">
+                    <div>${dateParts[0]}</div>
+                    <div>${timeParts[0]}:${timeParts[1]}</div>
+                </div>
+            </div>
+            <div class="status-content reference-content">
+                ${post.content}
+            </div>
+            ${mediaHTML}
+            <div class="reference-footer">
+                <a href="${post.url}" class="status-link" target="_blank">查看原帖</a>
+            </div>
+        </div>
+    `;
+}
+
+function getPostLookup() {
+    if (postLookup) return postLookup;
+
+    postLookup = {
+        byId: new Map(),
+        byUrl: new Map(),
+    };
+
+    postsData.forEach(post => {
+        postLookup.byId.set(String(post.id), post);
+        postLookup.byUrl.set(normalizeUrl(post.url), post);
+    });
+
+    return postLookup;
+}
+
+function extractReferenceUrl(content) {
+    if (!content) return '';
+
+    const hrefMatch = content.match(/href="(https?:\/\/[^"]+\/@[^"]+\/\d+)"/i);
+    if (hrefMatch) return hrefMatch[1];
+
+    const textMatch = content.match(/https?:\/\/[^\s<"]+\/@[^\s<"]+\/\d+/i);
+    return textMatch ? textMatch[0] : '';
+}
+
+function normalizeUrl(url) {
+    return String(url || '').replace(/\/+$/, '');
+}
+
+function removeReferenceLine(content) {
+    if (!content) return '';
+
+    const wrapper = document.createElement('div');
+    wrapper.innerHTML = content;
+
+    Array.from(wrapper.children).forEach(child => {
+        const text = child.textContent.trim();
+        if (/^RE:\s*https?:\/\/[^\s]+\/@[^\s]+\/\d+$/i.test(text)) {
+            child.remove();
+        }
+    });
+
+    return wrapper.innerHTML;
 }
 
 function createMediaHTML(mediaAttachments) {
@@ -225,14 +275,58 @@ function createMediaHTML(mediaAttachments) {
     if (mediaCount === 2) galleryClass = 'double';
     else if (mediaCount > 2) galleryClass = 'multiple';
 
-    const mediaItems = mediaAttachments.map(media => `
-        <img src="${media.url}"
-             alt="${media.description || 'Media'}"
-             class="media-item"
-             loading="lazy">
-    `).join('');
+    const mediaItems = mediaAttachments.map(media => {
+        const url = escapeHTML(media.url);
+        const description = escapeHTML(media.description || 'Media');
+
+        if (media.type === 'video') {
+            return `
+                <video src="${url}"
+                       class="media-item"
+                       controls
+                       preload="metadata"></video>
+            `;
+        }
+
+        if (media.type === 'gifv') {
+            return `
+                <video src="${url}"
+                       class="media-item"
+                       autoplay
+                       loop
+                       muted
+                       playsinline
+                       preload="metadata"></video>
+            `;
+        }
+
+        if (media.type === 'audio') {
+            return `
+                <audio src="${url}"
+                       class="media-item"
+                       controls
+                       preload="metadata"></audio>
+            `;
+        }
+
+        return `
+            <img src="${url}"
+                 alt="${description}"
+                 class="media-item"
+                 loading="lazy">
+        `;
+    }).join('');
 
     return `<div class="media-gallery ${galleryClass}">${mediaItems}</div>`;
+}
+
+function escapeHTML(value) {
+    return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
 }
 
 function setupSearch() {

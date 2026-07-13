@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 """渲染功能测试"""
+import json
+import re
 from pathlib import Path
 
 import pytest
@@ -78,6 +80,7 @@ def test_generate_html_template_escapes_profile_fields_and_serializes_posts_safe
         avatar='https://example.com/avatar.png" onerror="alert(1)',
         instance_name="example.social",
         background_image='https://example.com/bg.jpg");alert(1);/*',
+        account_url='https://example.com/@alice" onclick="alert(1)',
         total_posts=1,
         followers_count=2,
         following_count=3,
@@ -112,6 +115,9 @@ def test_generate_html_template_escapes_profile_fields_and_serializes_posts_safe
 
     assert "&lt;b&gt;Alice&lt;/b&gt;" in html
     assert "<b>Alice</b>" not in html
+    assert 'class="user-name-link"' in html
+    assert 'class="user-handle user-handle-link"' not in html
+    assert "https://example.com/@alice&quot; onclick=&quot;alert(1)" in html
     assert 'id="posts-data"' in html
     assert 'JSON.parse(document.getElementById("posts-data").textContent)' in html
     assert "</script><script>alert(1)</script>" not in html
@@ -173,3 +179,95 @@ def test_generate_mastodon_html_uses_timeouts_for_remote_assets(tmp_path, monkey
 
     assert timeouts
     assert all(timeout is not None for timeout in timeouts)
+
+
+def test_generate_mastodon_html_preserves_video_attachment_type(tmp_path, monkeypatch):
+    """HTML 数据应保留视频附件类型并使用本地媒体路径"""
+
+    class DummyResponse:
+        status_code = 404
+        headers = {"Content-Type": "image/png"}
+        content = b""
+
+        def iter_content(self, chunk_size):
+            return iter(())
+
+    monkeypatch.setattr(
+        "src.render.requests.get", lambda *args, **kwargs: DummyResponse()
+    )
+
+    post = {
+        "id": "123",
+        "created_at": "2024-01-01T12:00:00.000Z",
+        "content": "<p>测试视频</p>",
+        "url": "https://example.com/@test/123",
+        "sensitive": False,
+        "spoiler_text": "",
+        "visibility": "public",
+        "media_attachments": [
+            {
+                "id": "media-1",
+                "type": "video",
+                "url": "https://files.example.com/media/original/video.mp4",
+                "description": "视频附件",
+            }
+        ],
+        "reblogs_count": 0,
+        "favourites_count": 0,
+        "replies_count": 0,
+        "in_reply_to_id": None,
+        "in_reply_to_account_id": None,
+        "tags": [],
+        "emojis": [],
+        "account": {
+            "id": "1",
+            "username": "test",
+            "display_name": "Test",
+            "avatar": "https://example.com/avatar.png",
+            "url": "https://example.com/@test",
+            "note": "hello",
+            "header": "https://example.com/header.jpg",
+            "followers_count": 1,
+            "following_count": 2,
+        },
+    }
+    config = {
+        "backup": {"html_filename": "index.html", "media_folder": "media"},
+        "sync": {"china_timezone": False},
+    }
+
+    generate_mastodon_html([post], config, Path(tmp_path))
+
+    html = (tmp_path / "index.html").read_text(encoding="utf-8")
+    posts_json = re.search(
+        r'<script id="posts-data" type="application/json">(.*?)</script>',
+        html,
+        re.S,
+    ).group(1)
+    media = json.loads(posts_json)[0]["media_attachments"][0]
+
+    assert media["type"] == "video"
+    assert media["url"] == "media/media-1-video.mp4"
+
+
+def test_frontend_renders_video_and_gifv_media():
+    """前端应按附件类型渲染视频，而不是全部当图片处理"""
+    script = Path("src/assets/script.js").read_text(encoding="utf-8")
+
+    assert "media.type === 'video'" in script
+    assert "media.type === 'gifv'" in script
+    assert "<video" in script
+    assert "<img" in script
+
+
+def test_frontend_renders_reply_and_quote_as_embedded_reference_cards():
+    """回复和引用应渲染为内嵌原帖预览卡"""
+    script = Path("src/assets/script.js").read_text(encoding="utf-8")
+
+    assert "createReferenceHTML(post)" in script
+    assert "removeReferenceLine(post.content)" in script
+    assert "status-reference" in script
+    assert "回复对象" in script
+    assert "引用内容" in script
+    assert 'href="${post.account.url}" class="status-name"' not in script
+    assert 'href="${post.account.url}" class="status-handle"' not in script

@@ -396,6 +396,7 @@ def generate_mastodon_html(
         user_id = user["id"]
         # 从 URL 中提取实例名称
         user_url = user["url"]
+        account_url = user_url
         instance_name = (
             user_url.split("//")[1].split("/")[0] if "//" in user_url else ""
         )
@@ -434,6 +435,7 @@ def generate_mastodon_html(
         display_name = "Unknown User"
         avatar = ""
         user_id = "unknown"
+        account_url = ""
         instance_name = ""
         background_image = ""
         user_bio = ""
@@ -543,6 +545,7 @@ def generate_mastodon_html(
         avatar=avatar,
         instance_name=instance_name,
         background_image=background_image,
+        account_url=account_url,
         total_posts=total_posts,
         followers_count=followers_count,
         following_count=following_count,
@@ -565,6 +568,7 @@ def get_html_body_template(
     avatar: str,
     instance_name: str,
     background_image: str,
+    account_url: str,
     total_posts: int,
     followers_count: int,
     following_count: int,
@@ -574,6 +578,7 @@ def get_html_body_template(
     escaped_display_name = _escape_text(display_name)
     escaped_username = _escape_text(username)
     escaped_instance_name = _escape_text(instance_name)
+    escaped_account_url = _escape_text(account_url)
 
     # 处理背景图片
     bg_style = (
@@ -622,7 +627,9 @@ def get_html_body_template(
         <div class="profile-info">
             <img src="{escaped_avatar}" alt="{escaped_display_name}" class="user-avatar" onerror="this.style.display='none'">
             <div class="profile-text">
-                <h1 class="user-name">{escaped_display_name}</h1>
+                <h1 class="user-name">
+                    <a href="{escaped_account_url}" class="user-name-link" target="_blank">{escaped_display_name}</a>
+                </h1>
                 <div class="user-handle">@{escaped_username}@{escaped_instance_name}</div>
             </div>
             <div class="user-stats">
@@ -678,6 +685,7 @@ def generate_html_template(
     avatar: str,
     instance_name: str,
     background_image: str,
+    account_url: str,
     total_posts: int,
     followers_count: int,
     following_count: int,
@@ -702,6 +710,7 @@ def generate_html_template(
         avatar=avatar,
         instance_name=instance_name,
         background_image=background_image,
+        account_url=account_url,
         total_posts=total_posts,
         followers_count=followers_count,
         following_count=following_count,
