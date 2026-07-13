@@ -2,29 +2,29 @@
 
 一个自动化的 Mastodon 帖子同步工具，将你的所有帖子（含媒体文件）完整备份到本地或 GitHub 仓库，实现永久、安全的离线存档。
 
-## ✨ 核心特性
+## 核心特性
 
-### 📦 双重备份机制
+### 双重备份机制
 - **汇总归档**：所有帖子整理为单一大文件（默认 `archive.md`），按时间线完整呈现
 - **独立文件**：每帖存为单独 Markdown 文件（默认 `mastodon/` 目录），便于索引与引用
 - **媒体本地化**：自动下载所有图片/视频到 `media/` 目录，所有备份文件使用本地相对路径
 
-### 🤖 智能自动化
+### 智能自动化
 - **定时同步**：基于 GitHub Actions 实现无人值守的自动备份
 - **增量更新**：自动检测备份状态，首次全量备份，后续仅同步新增或修改的内容
 - **性能优化**：仅在有新内容时更新统计信息，避免不必要的重复计算
 - **错误容忍**：优雅处理文件锁定和访问权限问题
 
-### 🔧 高度可定制
+### 高度可定制
 - 自由定义备份文件夹名称
 - 支持双重部署模式：当前仓库备份或独立远程仓库备份
 - 提供中国时区（GMT+8）支持
 
-### 🔒 安全可靠
+### 安全可靠
 - 通过 GitHub Secrets 管理 API 令牌等敏感信息
 - 采用 MIT 许可证，完全开源透明
 
-## 📁 项目结构
+## 项目结构
 
 ```
 mastodon-vault-sync/
@@ -61,7 +61,7 @@ mastodon-vault-sync/
 └── index.html                 # (生成) 可浏览的网页界面
 ```
 
-## 🔑 获取 Mastodon API 凭证
+## 获取 Mastodon API 凭证
 
 ### 1. 实例地址
 实例地址就是你登录 Mastodon 时浏览器地址栏里的域名。
@@ -92,7 +92,7 @@ mastodon-vault-sync/
 8. 找到 **Your access token / 访问令牌**
 9. 复制完整 token，保存到安全位置
 
-如果页面里没有直接显示 token，可在应用详情页重新生成。⚠️ 不要将 token 贴进公开仓库或截图分享。
+如果页面里没有直接显示 token，可在应用详情页重新生成。注意：不要将 token 贴进公开仓库或截图分享。
 
 ### 3. 用户 ID
 用户 ID 不是用户名，也不是 `@name@instance`，而是一串纯数字。
@@ -126,7 +126,7 @@ https://mastodon.social/api/v1/accounts/lookup?acct=YourUsername
 
 如果你的账号是跨实例形式（例如 `yourname@example.com`），将 `acct=` 后面的值改为完整账号标识再查询。
 
-## 🚀 快速开始
+## 快速开始
 
 ### 方式一：本地使用（推荐）
 
@@ -139,24 +139,30 @@ cd mastodon-vault-sync
 ```
 
 ```bash
-# macOS / Linux: 创建并激活虚拟环境
+# macOS / Linux: 创建项目虚拟环境（只需执行一次）
 python3 -m venv venv
-source venv/bin/activate
+venv/bin/python -m pip install -r requirements.txt
 ```
 
 ```powershell
-# Windows: 创建并激活虚拟环境
+# Windows: 创建项目虚拟环境（只需执行一次）
 py -m venv venv
-venv\Scripts\activate
+venv\Scripts\python.exe -m pip install -r requirements.txt
 ```
+
+本地交互式运行不需要 GitHub Secrets。运行配置向导后，账号信息会保存到本地 `config.yaml`；该文件已被 `.gitignore` 忽略。
 
 ```bash
-# 安装运行依赖
-pip install -r requirements.txt
-
-# 运行配置向导
-python main.py init
+# macOS / Linux
+python3 main.py
 ```
+
+```powershell
+# Windows
+python main.py
+```
+
+项目根目录存在 `venv` 时，`main.py` 会自动使用项目虚拟环境，不需要每次执行 `activate`。
 
 **为什么使用虚拟环境？**
 - 隔离项目依赖，避免与其他 Python 项目冲突
@@ -179,18 +185,6 @@ python main.py init
 配置完成后会自动生成 `config.yaml` 文件。
 
 #### 使用
-
-**注意**：每次使用前需要先激活虚拟环境。
-
-```bash
-# macOS / Linux
-source venv/bin/activate
-```
-
-```powershell
-# Windows
-venv\Scripts\activate
-```
 
 **常用命令**：
 
@@ -218,9 +212,9 @@ python main.py help
 ```
 
 **提示**：
-- 在虚拟环境中，项目命令统一使用 `python main.py ...`
-- 如果不确定当前终端是否已激活虚拟环境，macOS / Linux 可直接使用 `venv/bin/python main.py ...`
-- 如果你的 Windows 环境没有 `py` 命令，可以把文档里的 `py -m ...` 改成 `python -m ...`
+- macOS / Linux 使用 `python3 main.py ...`，Windows 使用 `python main.py ...`
+- 项目根目录存在 `venv` 时，程序会自动切换到项目虚拟环境
+- 如果 Windows 环境没有 `python`，可以使用 `py main.py ...`
 - 首次运行建议使用 `sync --full` 获取完整历史记录
 
 #### 常见问题：OneDrive / iCloud / CloudStorage 路径无法写入
@@ -236,8 +230,8 @@ PermissionError: [Errno 1] Operation not permitted
 处理方式：
 
 ```bash
-# 确保使用仓库虚拟环境
-venv/bin/python main.py sync
+# 直接运行；项目会自动使用仓库虚拟环境
+python3 main.py sync
 ```
 
 如果仍然失败：
@@ -263,6 +257,8 @@ venv/bin/python main.py sync
 
 #### 第 3 步：配置 Secrets
 
+本节只适用于 GitHub Actions 自动同步。本地交互式运行不需要配置这些 Secrets。
+
 1. 进入 **Settings** → **Secrets and variables** → **Actions**
 2. 点击 **New repository secret**
 3. 按下表逐个创建 Secret
@@ -272,13 +268,13 @@ venv/bin/python main.py sync
 
 | Secret 名称             | 示例值                              | 必填 | 描述 |
 |-------------------------|-----------------------------------|------|------|
-| `MASTODON_INSTANCE_URL` | `https://mastodon.social`          | ✅   | Mastodon 实例地址 |
-| `MASTODON_USER_ID`      | `123456789012345678`               | ✅   | 用户 ID |
-| `MASTODON_ACCESS_TOKEN` | `Abc123xyz...`                     | ✅   | 访问令牌 |
-| `ARCHIVE_FILENAME`      | `archive.md`                       | ❌   | 汇总文件名，默认 `archive.md` |
-| `POSTS_FOLDER`          | `mastodon`                         | ❌   | 帖子目录名，默认 `mastodon` |
-| `MEDIA_FOLDER`          | `media`                            | ❌   | 媒体目录名，默认 `media` |
-| `CHINA_TIMEZONE`        | `false`                            | ❌   | 时区设置：`true` 使用中国时区 (GMT+8)，`false` 使用 UTC。默认 `false` |
+| `MASTODON_INSTANCE_URL` | `https://mastodon.social`          | 是   | Mastodon 实例地址 |
+| `MASTODON_USER_ID`      | `123456789012345678`               | 是   | 用户 ID |
+| `MASTODON_ACCESS_TOKEN` | `Abc123xyz...`                     | 是   | 访问令牌 |
+| `ARCHIVE_FILENAME`      | `archive.md`                       | 否   | 汇总文件名，默认 `archive.md` |
+| `POSTS_FOLDER`          | `mastodon`                         | 否   | 帖子目录名，默认 `mastodon` |
+| `MEDIA_FOLDER`          | `media`                            | 否   | 媒体目录名，默认 `media` |
+| `CHINA_TIMEZONE`        | `false`                            | 否   | 时区设置：`true` 使用中国时区 (GMT+8)，`false` 使用 UTC。默认 `false` |
 
 `MASTODON_INSTANCE_URL`、`MASTODON_USER_ID`、`MASTODON_ACCESS_TOKEN` 这三个 Secret 必须配置，否则同步脚本无法启动。
 
@@ -313,16 +309,16 @@ venv/bin/python main.py sync
    - **Expiration:** 选择合适的过期时间
    - **Scopes:** 勾选 **`repo`** 权限（完整的仓库访问权限）
 6. 滚动到页面底部，点击 **"Generate token"** 按钮
-7. **⚠️ 重要：** 请立即复制生成的 token（格式如 `ghp_xxx...`），页面刷新后将无法再次看到！
+7. **重要：** 请立即复制生成的 token（格式如 `ghp_xxx...`），页面刷新后将无法再次看到！
 
 #### 3. 配置远程仓库 Secrets
 
 | Secret 名称             | 示例值                              | 必填 | 描述 |
 |-------------------------|-----------------------------------|------|------|
-| `ENABLE_PUSH_TO_DATA_REPO` | `true`                          | ✅   | 启用远程同步 |
-| `TARGET_REPO_USERNAME`  | `your-username`                    | ✅   | 目标仓库的用户名 |
-| `TARGET_REPO_NAME`      | `mastodon-backup`                  | ✅   | 目标仓库名称 |
-| `TARGET_REPO_PAT`       | `ghp_xxx...`                       | ✅   | 刚刚生成的 Personal Access Token |
+| `ENABLE_PUSH_TO_DATA_REPO` | `true`                          | 是   | 启用远程同步 |
+| `TARGET_REPO_USERNAME`  | `your-username`                    | 是   | 目标仓库的用户名 |
+| `TARGET_REPO_NAME`      | `mastodon-backup`                  | 是   | 目标仓库名称 |
+| `TARGET_REPO_PAT`       | `ghp_xxx...`                       | 是   | 刚刚生成的 Personal Access Token |
 
 只有在你明确想把备份推送到另一个仓库时，才需要配置这一组 Secret；否则保持不填，工作流会直接提交到当前 Fork 仓库。
 
@@ -342,45 +338,46 @@ venv/bin/python main.py sync
 - 如果你在本地开发时不想提交它，不要重新把它写回项目级 `.gitignore`
 - 更合适的做法是把它加到你本机的 `.git/info/exclude`
 
-## 🗑️ 清理已删除的帖子
+## 清理已删除的帖子
 
 ### GitHub Actions 清理
 1. 进入 **Actions** 标签页
 2. 点击 **Mastodon Vault Cleanup** → **Run workflow**
-3. 这个工作流会执行一次全量重建：删除旧的 `archive.md`、`mastodon/`、`media/` 等备份产物后，重新从服务器拉取当前仍存在的帖子
-4. 运行完成后，仓库中的汇总文件、单帖文件、媒体文件、HTML 页面和热力图会一起更新
+3. 这个工作流会从服务器获取当前帖子列表，对比本地备份并删除已不存在的帖子和未引用媒体
+4. 运行完成后，汇总文件、HTML 页面和热力图会同步更新
 
 ### 本地清理
 ```bash
-# 清理模式：执行全量重建，自动移除本地已不存在于服务器上的帖子和媒体
+# 清理模式：移除本地已不存在于服务器上的帖子和媒体
 python main.py cleanup
 ```
 
 **注意：**
-- 清理操作会永久删除当前备份目录中的旧帖子和旧媒体文件
-- `cleanup` 本身就会完成重建，不需要再额外执行 `sync --full`
+- 清理操作会删除服务器上已经不存在的本地帖子，以及不再被帖子引用的媒体文件
+- `cleanup` 不会清空帖子目录、删除同步状态或重新下载全部媒体
+- 如果服务器请求失败，程序会停止清理，避免误删本地备份
 
-## 👨‍💻 开发设置
+## 开发设置
 
 ### 环境设置
 
 ```bash
-# 安装运行依赖
-pip install -r requirements.txt
+# macOS / Linux: 安装运行依赖
+venv/bin/python -m pip install -r requirements.txt
 ```
 
 ```bash
 # macOS / Linux: 安装开发依赖、pre-commit hooks 并运行检查
-pip install -r requirements-dev.txt
-python3 -m pre_commit install
-python3 -m pre_commit run --all-files
+venv/bin/python -m pip install -r requirements-dev.txt
+venv/bin/python -m pre_commit install
+venv/bin/python -m pre_commit run --all-files
 ```
 
 ```powershell
 # Windows: 安装开发依赖、pre-commit hooks 并运行检查
-pip install -r requirements-dev.txt
-py -m pre_commit install
-py -m pre_commit run --all-files
+venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+venv\Scripts\python.exe -m pre_commit install
+venv\Scripts\python.exe -m pre_commit run --all-files
 ```
 
 ### 代码规范
@@ -397,24 +394,24 @@ py -m pre_commit run --all-files
 
 ```bash
 # macOS / Linux: 运行所有测试
-python3 -m pytest tests/ -v
+venv/bin/python -m pytest tests/ -v
 
 # macOS / Linux: 运行流程级 smoke tests
-python3 -m pytest tests/test_sync_flow.py tests/test_cleanup_flow.py -v
+venv/bin/python -m pytest tests/test_sync_flow.py tests/test_cleanup_flow.py -v
 
 # macOS / Linux: 运行特定测试
-python3 -m pytest tests/test_basic.py -v
+venv/bin/python -m pytest tests/test_basic.py -v
 ```
 
 ```powershell
 # Windows: 运行所有测试
-py -m pytest tests/ -v
+venv\Scripts\python.exe -m pytest tests/ -v
 
 # Windows: 运行流程级 smoke tests
-py -m pytest tests/test_sync_flow.py tests/test_cleanup_flow.py -v
+venv\Scripts\python.exe -m pytest tests/test_sync_flow.py tests/test_cleanup_flow.py -v
 
 # Windows: 运行特定测试
-py -m pytest tests/test_basic.py -v
+venv\Scripts\python.exe -m pytest tests/test_basic.py -v
 ```
 
 CI 除了运行完整测试套件外，还会单独执行同步与 cleanup 的流程级 smoke tests。
@@ -425,6 +422,6 @@ CI 除了运行完整测试套件外，还会单独执行同步与 cleanup 的�
 
 欢迎提交 Issue 和 Pull Request！详见 [CONTRIBUTING.md](CONTRIBUTING.md)
 
-## 📄 许可证
+## 许可证
 
 本项目采用 MIT 许可证 - 详见 [LICENSE](LICENSE) 文件。

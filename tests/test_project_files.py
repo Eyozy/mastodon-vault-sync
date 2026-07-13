@@ -51,8 +51,8 @@ def test_readme_documents_runtime_and_dev_installation():
     """README 应区分普通使用和开发安装"""
     content = read_text("README.md")
     assert "requirements-dev.txt" in content
-    assert "python3 -m pytest tests/ -v" in content
-    assert "py -m pytest tests/ -v" in content
+    assert "venv/bin/python -m pytest tests/ -v" in content
+    assert "venv\\Scripts\\python.exe -m pytest tests/ -v" in content
     assert "sync_state.json" in content
     assert ".git/info/exclude" in content
 
@@ -61,8 +61,8 @@ def test_contributing_documents_dev_requirements_and_templates():
     """贡献文档应说明开发依赖安装和提交流程"""
     content = read_text("CONTRIBUTING.md")
     assert "requirements-dev.txt" in content
-    assert "python3 -m pre_commit run --all-files" in content
-    assert "python3 -m pytest tests/ -v" in content
+    assert "venv/bin/python -m pre_commit run --all-files" in content
+    assert "venv/bin/python -m pytest tests/ -v" in content
     assert "sync_state.json" in content
     assert ".git/info/exclude" in content
 
@@ -71,7 +71,7 @@ def test_tests_readme_documents_dev_requirements():
     """测试文档应要求安装开发依赖"""
     content = read_text("tests/README.md")
     assert "requirements-dev.txt" in content
-    assert "python3 -m pytest tests/ -v" in content
+    assert "venv/bin/python -m pytest tests/ -v" in content
     assert "sync_state.json" in content
 
 

@@ -4,24 +4,18 @@
 
 ## 环境准备
 
-### 1. 创建并激活虚拟环境
+### 1. 创建项目虚拟环境
 
 ```bash
-# macOS / Linux: 创建并激活虚拟环境
+# macOS / Linux: 创建项目虚拟环境
 python3 -m venv venv
-source venv/bin/activate
+venv/bin/python -m pip install -r requirements-dev.txt
 ```
 
 ```powershell
-# Windows: 创建并激活虚拟环境
+# Windows: 创建项目虚拟环境
 py -m venv venv
-venv\Scripts\activate
-```
-
-### 2. 安装依赖
-
-```bash
-pip install -r requirements-dev.txt
+venv\Scripts\python.exe -m pip install -r requirements-dev.txt
 ```
 
 `requirements-dev.txt` 会自动包含运行依赖，并安装 `pytest`、`pre-commit`、`black`、`isort`、`flake8` 等开发工具。
@@ -35,27 +29,27 @@ pwd  # 应该显示 .../mastodon-vault-sync
 
 ```bash
 # macOS / Linux: 运行所有测试
-python3 -m pytest tests/ -v
+venv/bin/python -m pytest tests/ -v
 
 # macOS / Linux: 显示详细输出(包括 print 语句)
-python3 -m pytest tests/ -v -s
+venv/bin/python -m pytest tests/ -v -s
 
 # macOS / Linux: 仅运行流程级 smoke tests
-python3 -m pytest tests/test_sync_flow.py tests/test_cleanup_flow.py -v
+venv/bin/python -m pytest tests/test_sync_flow.py tests/test_cleanup_flow.py -v
 ```
 
 ```powershell
 # Windows: 运行所有测试
-py -m pytest tests/ -v
+venv\Scripts\python.exe -m pytest tests/ -v
 
 # Windows: 显示详细输出(包括 print 语句)
-py -m pytest tests/ -v -s
+venv\Scripts\python.exe -m pytest tests/ -v -s
 
 # Windows: 仅运行流程级 smoke tests
-py -m pytest tests/test_sync_flow.py tests/test_cleanup_flow.py -v
+venv\Scripts\python.exe -m pytest tests/test_sync_flow.py tests/test_cleanup_flow.py -v
 ```
 
-如果你的 Windows 环境没有 `py` 命令，可以改用 `python -m pytest ...`。
+测试直接调用项目虚拟环境里的 Python，不需要激活虚拟环境。
 
 ## 测试覆盖
 
@@ -126,11 +120,11 @@ cd /path/to/mastodon-vault-sync
 
 **推荐解决**：
 ```bash
-python3 -m pytest tests/ -v
+venv/bin/python -m pytest tests/ -v
 ```
 
 ```powershell
-py -m pytest tests/ -v
+venv\Scripts\python.exe -m pytest tests/ -v
 ```
 
 **备用解决**：

@@ -1,8 +1,8 @@
-# 🤝 贡献指南
+# 贡献指南
 
 感谢你对 Mastodon Vault Sync 的关注！我们欢迎各种形式的贡献。
 
-## 🐛 报告问题
+## 报告问题
 
 在提交 Issue 前，请先[搜索现有问题](https://github.com/Eyozy/mastodon-vault-sync/issues)避免重复。
 
@@ -13,14 +13,14 @@
 - 错误日志（如有）
 - 环境信息：操作系统、Python 版本、项目版本
 
-## 💡 功能建议
+## 功能建议
 
 提交 Feature Request 时，请说明：
 - 功能的用途和价值
 - 可能的实现方案
 - 对现有功能的影响
 
-## 🛠️ 代码贡献
+## 代码贡献
 
 ### 开发环境设置
 
@@ -34,42 +34,35 @@ git remote add upstream https://github.com/Eyozy/mastodon-vault-sync.git
 ```
 
 ```bash
-# 3. macOS / Linux: 创建并激活虚拟环境
+# 3. macOS / Linux: 创建项目虚拟环境
 python3 -m venv venv
-source venv/bin/activate
+venv/bin/python -m pip install -r requirements-dev.txt
 ```
 
 ```powershell
-# 3. Windows: 创建并激活虚拟环境
+# 3. Windows: 创建项目虚拟环境
 py -m venv venv
-venv\Scripts\activate
+venv\Scripts\python.exe -m pip install -r requirements-dev.txt
 ```
 
 ```bash
-# 4. 安装运行依赖
-pip install -r requirements.txt
-```
+# 4. macOS / Linux: 安装 pre-commit hooks
+venv/bin/python -m pre_commit install
 
-```bash
-# 5. macOS / Linux: 安装开发依赖和 pre-commit hooks
-pip install -r requirements-dev.txt
-python3 -m pre_commit install
-
-# 6. macOS / Linux: 验证安装
-python3 -m pre_commit run --all-files
-python3 -m pytest tests/test_sync_flow.py tests/test_cleanup_flow.py -v
-python3 -m pytest tests/ -v
+# 5. macOS / Linux: 验证安装
+venv/bin/python -m pre_commit run --all-files
+venv/bin/python -m pytest tests/test_sync_flow.py tests/test_cleanup_flow.py -v
+venv/bin/python -m pytest tests/ -v
 ```
 
 ```powershell
-# 5. Windows: 安装开发依赖和 pre-commit hooks
-pip install -r requirements-dev.txt
-py -m pre_commit install
+# 4. Windows: 安装 pre-commit hooks
+venv\Scripts\python.exe -m pre_commit install
 
-# 6. Windows: 验证安装
-py -m pre_commit run --all-files
-py -m pytest tests/test_sync_flow.py tests/test_cleanup_flow.py -v
-py -m pytest tests/ -v
+# 5. Windows: 验证安装
+venv\Scripts\python.exe -m pre_commit run --all-files
+venv\Scripts\python.exe -m pytest tests/test_sync_flow.py tests/test_cleanup_flow.py -v
+venv\Scripts\python.exe -m pytest tests/ -v
 ```
 
 ### 配置测试环境（可选）
@@ -90,7 +83,7 @@ cp config.example.yaml config.yaml
 - `access_token`：**首选项** → **开发** → **新建应用**，只勾选 `read:statuses`
 - `user_id`：访问 `https://<实例>/api/v1/accounts/lookup?acct=<用户名>`，获取 JSON 中的 `id`
 
-⚠️ 不要将测试 token 提交到仓库。
+注意：不要将测试 token 提交到仓库。
 
 ### 开发流程
 
@@ -108,9 +101,9 @@ git checkout -b feature/功能名称
 # 遵循现有代码风格，添加必要注释
 
 # 4. 运行检查和测试
-python3 -m pre_commit run --all-files
-python3 -m pytest tests/test_sync_flow.py tests/test_cleanup_flow.py -v
-python3 -m pytest tests/ -v
+venv/bin/python -m pre_commit run --all-files
+venv/bin/python -m pytest tests/test_sync_flow.py tests/test_cleanup_flow.py -v
+venv/bin/python -m pytest tests/ -v
 
 # 5. 提交更改
 git add .
@@ -124,7 +117,7 @@ git push origin 分支名称
 # 访问 GitHub 仓库页面，点击 "New Pull Request"
 ```
 
-Windows 用户可将上面的 `python3 -m ...` 改为 `py -m ...`；如果你的环境没有 `py`，再改用 `python -m ...`。
+日常运行 `main.py` 时不需要激活虚拟环境；程序会自动使用项目内的 `venv`。开发工具和测试直接调用虚拟环境里的 Python，避免依赖安装到系统 Python。
 
 ### 关于 `sync_state.json`
 
@@ -165,7 +158,7 @@ GitHub 已自动识别以下协作模板：
 - [ ] 提交信息清晰明确
 - [ ] 没有合并冲突
 
-## 📚 文档贡献
+## 文档贡献
 
 文档改进同样重要：
 - 修正拼写和语法错误
@@ -173,6 +166,6 @@ GitHub 已自动识别以下协作模板：
 - 添加使用示例
 - 翻译成其他语言
 
-## 🎓 行为准则
+## 行为准则
 
 请保持友好、尊重的交流方式，共同营造良好的开源社区氛围。
