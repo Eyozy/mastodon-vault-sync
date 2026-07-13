@@ -264,10 +264,10 @@ def test_frontend_renders_reply_and_quote_as_embedded_reference_cards():
     """回复和引用应渲染为内嵌原帖预览卡"""
     script = Path("src/assets/script.js").read_text(encoding="utf-8")
 
-    assert "createReferenceHTML(post)" in script
+    assert "getReferencePost(post)" in script
     assert "removeReferenceLine(post.content)" in script
     assert "status-reference" in script
-    assert "回复对象" in script
+    assert "回复内容" in script
     assert "引用内容" in script
     assert 'href="${post.account.url}" class="status-name"' not in script
     assert 'href="${post.account.url}" class="status-handle"' not in script

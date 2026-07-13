@@ -102,10 +102,12 @@ function setupPagination() {
 }
 
 function createPostHTML(post) {
+    const reference = getReferencePost(post);
     const mediaHTML = createMediaHTML(post.media_attachments);
-    const referenceHTML = createReferenceHTML(post);
+    const referenceHTML = reference
+        ? createReferenceCardHTML(reference.post, reference.label)
+        : '';
     const contentHTML = referenceHTML ? removeReferenceLine(post.content) : post.content;
-    const tagsHTML = post.tags.map(tag => `<a href="#" class="hashtag">#${tag.name}</a>`).join(' ');
     const statsHTML = `
         <span class="stat-item">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="stat-icon">
@@ -130,15 +132,7 @@ function createPostHTML(post) {
         </span>
     `;
 
-    const isReply = post.in_reply_to_id && post.in_reply_to_id !== null;
-    const hasRELink = post.content && (
-        post.content.includes('RE:') ||
-        post.content.includes('re:') ||
-        post.content.includes('Re:') ||
-        post.content.toLowerCase().includes('re:')
-    );
-    const isQuote = hasRELink && !isReply;
-    const actionText = isReply ? '查看回复' : (isQuote ? '查看引用' : '查看原文');
+    const actionText = getPostActionText(post, reference);
 
     return `
         <div class="status" data-id="${post.id}">
@@ -168,27 +162,64 @@ function createPostHTML(post) {
     `;
 }
 
-function createReferenceHTML(post) {
+function getReferencePost(post) {
     const lookup = getPostLookup();
-    let label = '';
-    let referencePost = null;
 
     if (post.in_reply_to_id) {
-        label = '回复对象';
-        referencePost = lookup.byId.get(String(post.in_reply_to_id));
-    }
-
-    if (!referencePost) {
-        const referenceUrl = extractReferenceUrl(post.content);
-        if (referenceUrl) {
-            label = '引用内容';
-            referencePost = lookup.byUrl.get(normalizeUrl(referenceUrl));
+        const referencePost = lookup.byId.get(String(post.in_reply_to_id));
+        if (referencePost && referencePost.id !== post.id) {
+            return { label: '回复内容', post: referencePost, type: 'reply' };
         }
     }
 
-    if (!referencePost || referencePost.id === post.id) return '';
+    const referenceUrl = extractReferenceUrl(post.content);
+    if (!referenceUrl) return null;
 
-    return createReferenceCardHTML(referencePost, label);
+    const referencePost = lookup.byUrl.get(normalizeUrl(referenceUrl));
+    if (!referencePost || referencePost.id === post.id) return null;
+
+    return { label: '引用内容', post: referencePost, type: 'quote' };
+}
+
+function getPostActionText(post, reference) {
+    if (post.in_reply_to_id) return '查看回复';
+    if (reference && reference.type === 'quote') return '查看引用';
+    if (extractReferenceUrl(post.content)) return '查看引用';
+
+    return '查看原文';
+}
+
+function removeReferenceLine(content) {
+    if (!content) return '';
+
+    const wrapper = document.createElement('div');
+    wrapper.innerHTML = content;
+
+    Array.from(wrapper.children).forEach(child => {
+        if (isReferenceLine(child.textContent.trim())) {
+            child.remove();
+        }
+    });
+
+    return wrapper.innerHTML;
+}
+
+function isReferenceLine(text) {
+    return /^RE:\s*https?:\/\/[^\s]+\/@[^\s]+\/\d+$/i.test(text);
+}
+
+function extractReferenceUrl(content) {
+    if (!content || !/re:/i.test(content)) return '';
+
+    const hrefMatch = content.match(/href="(https?:\/\/[^"]+\/@[^"]+\/\d+)"/i);
+    if (hrefMatch) return hrefMatch[1];
+
+    const textMatch = content.match(/https?:\/\/[^\s<"]+\/@[^\s<"]+\/\d+/i);
+    return textMatch ? textMatch[0] : '';
+}
+
+function normalizeUrl(url) {
+    return String(url || '').replace(/\/+$/, '');
 }
 
 function createReferenceCardHTML(post, label) {
@@ -236,37 +267,6 @@ function getPostLookup() {
 
     return postLookup;
 }
-
-function extractReferenceUrl(content) {
-    if (!content) return '';
-
-    const hrefMatch = content.match(/href="(https?:\/\/[^"]+\/@[^"]+\/\d+)"/i);
-    if (hrefMatch) return hrefMatch[1];
-
-    const textMatch = content.match(/https?:\/\/[^\s<"]+\/@[^\s<"]+\/\d+/i);
-    return textMatch ? textMatch[0] : '';
-}
-
-function normalizeUrl(url) {
-    return String(url || '').replace(/\/+$/, '');
-}
-
-function removeReferenceLine(content) {
-    if (!content) return '';
-
-    const wrapper = document.createElement('div');
-    wrapper.innerHTML = content;
-
-    Array.from(wrapper.children).forEach(child => {
-        const text = child.textContent.trim();
-        if (/^RE:\s*https?:\/\/[^\s]+\/@[^\s]+\/\d+$/i.test(text)) {
-            child.remove();
-        }
-    });
-
-    return wrapper.innerHTML;
-}
-
 function createMediaHTML(mediaAttachments) {
     if (!mediaAttachments || mediaAttachments.length === 0) return '';
 
