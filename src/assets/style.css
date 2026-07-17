@@ -590,40 +590,48 @@ h4, .h4 {
     display: none;
     position: fixed;
     z-index: 9999;
-    left: 0;
-    top: 0;
+    inset: 0;
     width: 100%;
     height: 100%;
-    overflow: auto;
+    height: 100dvh;
+    overflow: hidden;
+    overscroll-behavior: none;
+    touch-action: none;
     background-color: rgba(0, 0, 0, 0.9);
 }
 #imageModal .modal-content {
     margin: auto;
     display: block;
-    max-width: 90%;
-    max-height: 90%;
+    max-width: min(90vw, 100%);
+    max-height: min(90vh, 90dvh);
+    width: auto;
+    height: auto;
+    object-fit: contain;
     position: absolute;
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
     transform-origin: center;
-    will-change: transform;
+    z-index: 1;
+    animation-name: zoom;
+    animation-duration: 0.6s;
     image-rendering: crisp-edges;
 }
 #imageModal #caption {
-    margin: auto;
+    position: absolute;
+    left: 50%;
+    bottom: max(16px, env(safe-area-inset-bottom));
+    transform: translateX(-50%);
+    margin: 0;
     display: block;
-    width: 80%;
-    max-width: 700px;
+    width: min(80%, 700px);
+    max-height: 20vh;
+    overflow: hidden;
     text-align: center;
     color: #ccc;
     padding: 10px 0;
-    height: 150px;
-}
-#imageModal .modal-content,
-#imageModal #caption {
-    animation-name: zoom;
-    animation-duration: 0.6s;
+    z-index: 1;
+    pointer-events: none;
 }
 @keyframes zoom {
     from {
@@ -637,18 +645,29 @@ h4, .h4 {
 }
 #imageModal .close {
     position: absolute;
-    top: 15px;
-    right: 35px;
+    top: max(12px, env(safe-area-inset-top));
+    right: max(16px, env(safe-area-inset-right));
+    z-index: 2;
     color: #f1f1f1;
     font-size: 40px;
     font-weight: bold;
+    line-height: 1;
     transition: 0.3s;
+    cursor: pointer;
 }
 #imageModal .close:hover,
 #imageModal .close:focus {
     color: #bbb;
     text-decoration: none;
-    cursor: pointer;
+}
+body.modal-open {
+    position: fixed;
+    left: 0;
+    right: 0;
+    width: 100%;
+    overflow: hidden;
+    touch-action: none;
+    overscroll-behavior: none;
 }
 .status-content p {
     margin-bottom: 1rem;

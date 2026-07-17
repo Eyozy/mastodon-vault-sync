@@ -425,48 +425,88 @@ window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', fun
 
 // 图片点击放大功能
 let modalInitialized = false;
+let modalScrollY = 0;
 
 function setupImageModal() {
+    if (modalInitialized) {
+        return;
+    }
+
     const modal = document.getElementById('imageModal');
     const modalImg = document.getElementById('modalImage');
     const captionText = document.getElementById('caption');
 
-    // 为所有帖子图片添加点击事件
-    const images = document.querySelectorAll('.status-content > img, .media-gallery img.media-item');
+    if (!modal || !modalImg || !captionText) {
+        return;
+    }
 
-    images.forEach(img => {
-        img.addEventListener('click', function () {
-            modal.style.display = 'block';
-            modalImg.src = this.src;
-            modalImg.alt = this.alt;
-            captionText.innerHTML = this.alt;
-        });
+    function isModalOpen() {
+        return modal.style.display === 'block';
+    }
+
+    function openImageModal(img) {
+        if (!img || !img.src) {
+            return;
+        }
+
+        modalScrollY = window.scrollY;
+        modalImg.src = img.src;
+        modalImg.alt = img.alt || '';
+        captionText.textContent = img.alt || '';
+        modal.style.display = 'block';
+        document.body.classList.add('modal-open');
+        document.body.style.top = `-${modalScrollY}px`;
+    }
+
+    function closeImageModal() {
+        if (!isModalOpen()) {
+            return;
+        }
+
+        modal.style.display = 'none';
+        modalImg.removeAttribute('src');
+        modalImg.alt = '';
+        captionText.textContent = '';
+        document.body.classList.remove('modal-open');
+        document.body.style.top = '';
+        window.scrollTo(0, modalScrollY);
+    }
+
+    document.addEventListener('click', function (e) {
+        const img = e.target.closest('.status-content > img, .media-gallery img.media-item');
+        if (!img) {
+            return;
+        }
+        openImageModal(img);
     });
 
-    // 只初始化一次事件监听器
-    if (!modalInitialized) {
-        // 点击关闭按钮
-        const closeBtn = document.querySelector('#imageModal .close');
-        closeBtn.onclick = function () {
-            modal.style.display = 'none';
-        };
-
-        // 点击模态框背景关闭
-        modal.onclick = function (e) {
-            if (e.target === modal) {
-                modal.style.display = 'none';
-            }
-        };
-
-        // 按 ESC 键关闭
-        document.addEventListener('keydown', function (e) {
-            if (e.key === 'Escape' && modal.style.display === 'block') {
-                modal.style.display = 'none';
-            }
+    const closeBtn = document.querySelector('#imageModal .close');
+    if (closeBtn) {
+        closeBtn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            closeImageModal();
         });
-
-        modalInitialized = true;
     }
+
+    modal.addEventListener('click', function (e) {
+        if (e.target === modal || e.target === modalImg) {
+            closeImageModal();
+        }
+    });
+
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && isModalOpen()) {
+            closeImageModal();
+        }
+    });
+
+    modal.addEventListener('touchmove', function (e) {
+        if (e.target === modal) {
+            e.preventDefault();
+        }
+    }, { passive: false });
+
+    modalInitialized = true;
 }
 
 const backToTopBtn = document.createElement('button');
