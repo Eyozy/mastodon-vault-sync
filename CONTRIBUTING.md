@@ -117,7 +117,7 @@ git push origin 分支名称
 # 访问 GitHub 仓库页面，点击 "New Pull Request"
 ```
 
-日常运行 `main.py` 时不需要激活虚拟环境；程序会自动使用项目内的 `venv`。开发工具和测试直接调用虚拟环境里的 Python，避免依赖安装到系统 Python。
+推荐使用项目虚拟环境运行 `main.py` 与开发工具。默认不自动切换解释器；如需兼容旧行为，可设置 `MASTODON_VAULT_SYNC_AUTO_VENV=1`。
 
 ### 关于 `sync_state.json`
 

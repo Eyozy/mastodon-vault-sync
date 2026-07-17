@@ -104,7 +104,7 @@ def safe_remove_directory(path: "Path") -> bool:  # type: ignore
                         os.chmod(dir_path, 0o777)
                     except (OSError, PermissionError):
                         pass
-        except Exception as e:
+        except OSError as e:
             logging.warning(f"⚠️ 移除只读属性失败：{e}")
 
         # 再次尝试删除
@@ -122,10 +122,10 @@ def safe_remove_directory(path: "Path") -> bool:  # type: ignore
 
                 shutil.rmtree(path, onerror=remove_readonly)
                 return True
-            except Exception as e:
+            except OSError as e:
                 logging.error(f"❌ 无法删除目录 {path}: {e}")
                 return False
-    except Exception as e:
+    except OSError as e:
         logging.error(f"❌ 删除目录 {path} 时发生未知错误：{e}")
         return False
 
@@ -147,9 +147,9 @@ def safe_remove_file(path: "Path") -> bool:  # type: ignore
             os.chmod(path, 0o777)
             path.unlink()
             return True
-        except Exception as e:
+        except OSError as e:
             logging.error(f"❌ 无法删除文件 {path}: {e}")
             return False
-    except Exception as e:
+    except OSError as e:
         logging.error(f"❌ 删除文件 {path} 时发生未知错误：{e}")
         return False

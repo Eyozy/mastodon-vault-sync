@@ -38,16 +38,12 @@ class AppConfig(BaseModel):
     mastodon: MastodonConfig
     backup: BackupConfig = Field(default_factory=BackupConfig)
     sync: SyncConfig = Field(default_factory=SyncConfig)
-
-    # Allow extra fields for runtime state (e.g. media_file_map, is_full_sync)
+    # 运行时字段（如 is_full_sync、media_file_map）允许透传
     model_config = {"extra": "allow"}
 
 
 def validate_config(config: Dict[str, Any]) -> AppConfig:
-    """
-    Validates config dictionary using Pydantic model.
-    Returns the validated AppConfig model.
-    """
+    """入口校验：只在加载配置时用 pydantic，业务层继续使用 dict。"""
     try:
         app_config = AppConfig(**config)
         logging.info("✔ 配置验证通过")
@@ -58,13 +54,7 @@ def validate_config(config: Dict[str, Any]) -> AppConfig:
 
 
 def get_config() -> Dict[str, Any]:
-    """
-    Loads configuration from environment or yaml file.
-    Returns a dictionary for compatibility, but validated.
-    """
-    config_data = {}
-
-    # GitHub Actions environment
+    """加载配置，校验后返回 dict，兼容现有可变运行时字段。"""
     if os.environ.get("GITHUB_ACTIONS") == "true":
         logging.info("✔ 检测到 GitHub Actions 环境，使用环境变量配置。")
         config_data = {
@@ -88,7 +78,6 @@ def get_config() -> Dict[str, Any]:
             },
         }
     else:
-        # Local environment
         logging.info("✔ 本地运行模式，尝试从 config.yaml 文件加载。")
         try:
             with open("config.yaml", "r", encoding="utf-8") as f:
@@ -101,9 +90,4 @@ def get_config() -> Dict[str, Any]:
             logging.error(f"❌ 错误：配置文件格式错误：{e}")
             raise
 
-    # Validate and return as dict (for compatibility with existing mutable usage)
-    # Ideally we should use the model object, but that requires more refactoring.
-    # We dump it back to dict to ensure defaults are applied and types are coerced where possible,
-    # but we need to match the structure expected by the rest of the app.
-    validated_config = validate_config(config_data)
-    return validated_config.model_dump()
+    return validate_config(config_data).model_dump()

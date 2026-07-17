@@ -43,7 +43,7 @@ async def download_media(
                             break
                         await f.write(chunk)
             return local_filename
-        except Exception as e:
+        except (aiohttp.ClientError, OSError, asyncio.TimeoutError) as e:
             if local_file_path.exists():
                 local_file_path.unlink(missing_ok=True)
             if attempt == MEDIA_DOWNLOAD_RETRY_ATTEMPTS:
@@ -319,7 +319,7 @@ async def save_posts(
 
     logging.info(f"📄 正在写入 {len(posts)} 个帖子文件...")
 
-    async for post in async_iter(posts):
+    for post in posts:
         local_dt = get_timezone_aware_datetime(
             post["created_at"], config["sync"]["china_timezone"]
         )
@@ -332,33 +332,23 @@ async def save_posts(
             config["sync"]["china_timezone"],
         )
 
-        # 使用 aiofiles 异步写入
         if not file_path.exists():
             should_write = True
         else:
-            # 读取现有文件比较内容（异步读取）
             try:
                 async with aiofiles.open(file_path, "r", encoding="utf-8") as f:
                     existing_content = await f.read()
                 should_write = existing_content != new_content
-            except Exception:
+            except OSError as e:
+                logging.warning(f"⚠️ 读取已有帖子文件失败，将覆盖写入 {file_path}: {e}")
                 should_write = True
 
         if should_write:
             try:
                 async with aiofiles.open(file_path, "w", encoding="utf-8") as f:
                     await f.write(new_content)
-                # logging.info(f"📄 已备份/更新：{filename}") # 减少日志输出，避免刷屏
-            except IOError as e:
+            except OSError as e:
                 logging.error(f"❌ 无法写入文件 {file_path}: {e}")
 
-    # 所有单帖文件落盘后，再统一重建归档文件
     update_archive_file(posts, config, backup_path)
-
     logging.info("✅ 所有帖子文件写入完成")
-
-
-async def async_iter(iterable):
-    """辅助函数：将同步可迭代对象转换为异步迭代器"""
-    for item in iterable:
-        yield item

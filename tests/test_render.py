@@ -140,7 +140,7 @@ def test_generate_mastodon_html_uses_timeouts_for_remote_assets(tmp_path, monkey
         timeouts.append(kwargs.get("timeout"))
         return DummyResponse()
 
-    monkeypatch.setattr("src.render.requests.get", fake_get)
+    monkeypatch.setattr("src.render.html.requests.get", fake_get)
 
     post = {
         "id": "123",
@@ -193,7 +193,7 @@ def test_generate_mastodon_html_preserves_video_attachment_type(tmp_path, monkey
             return iter(())
 
     monkeypatch.setattr(
-        "src.render.requests.get", lambda *args, **kwargs: DummyResponse()
+        "src.render.html.requests.get", lambda *args, **kwargs: DummyResponse()
     )
 
     post = {

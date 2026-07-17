@@ -162,7 +162,7 @@ python3 main.py
 python main.py
 ```
 
-项目根目录存在 `venv` 时，`main.py` 会自动使用项目虚拟环境，不需要每次执行 `activate`。
+推荐使用项目虚拟环境运行。默认不会自动切换解释器；如需自动 reexec，可设置 `MASTODON_VAULT_SYNC_AUTO_VENV=1`。
 
 **为什么使用虚拟环境？**
 - 隔离项目依赖，避免与其他 Python 项目冲突
@@ -213,7 +213,7 @@ python main.py help
 
 **提示**：
 - macOS / Linux 使用 `python3 main.py ...`，Windows 使用 `python main.py ...`
-- 项目根目录存在 `venv` 时，程序会自动切换到项目虚拟环境
+- 推荐直接用 `venv/bin/python main.py ...`（Windows: `venv\Scripts\python.exe main.py ...`）；可选 `MASTODON_VAULT_SYNC_AUTO_VENV=1` 自动 reexec
 - 如果 Windows 环境没有 `python`，可以使用 `py main.py ...`
 - 首次运行建议使用 `sync --full` 获取完整历史记录
 
@@ -230,7 +230,7 @@ PermissionError: [Errno 1] Operation not permitted
 处理方式：
 
 ```bash
-# 直接运行；项目会自动使用仓库虚拟环境
+# 推荐用项目虚拟环境运行
 python3 main.py sync
 ```
 

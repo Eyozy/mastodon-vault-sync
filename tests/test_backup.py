@@ -2,6 +2,7 @@
 """备份逻辑测试"""
 import asyncio
 
+import aiohttp
 import pytest
 
 from src.backup import (
@@ -197,7 +198,7 @@ async def test_download_media_retries_transient_errors(tmp_path):
             nonlocal attempts
             attempts += 1
             if attempts < 3:
-                raise RuntimeError("temporary download error")
+                raise aiohttp.ClientError("temporary download error")
             return FakeResponse()
 
         async def __aexit__(self, exc_type, exc, tb):

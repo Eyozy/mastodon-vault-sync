@@ -84,8 +84,25 @@ def test_gitignore_tracks_sync_state_file_for_actions_incremental_sync():
     assert ".worktrees/" in lines
 
 
+def _action_version(content: str, action: str) -> str:
+    for line in content.splitlines():
+        line = line.strip()
+        prefix = f"uses: {action}@"
+        if line.startswith(prefix):
+            return line[len(prefix) :]
+    raise AssertionError(f"missing action: {action}")
+
+
 def test_cleanup_workflow_uses_current_action_versions():
     """cleanup workflow 应与其他 workflow 使用一致的 action 主版本"""
-    content = read_text(".github/workflows/cleanup.yml")
-    assert "actions/checkout@v5" in content
-    assert "actions/setup-python@v6" in content
+    ci = read_text(".github/workflows/ci.yml")
+    cleanup = read_text(".github/workflows/cleanup.yml")
+    sync = read_text(".github/workflows/sync.yml")
+
+    for action in ("actions/checkout", "actions/setup-python"):
+        versions = {
+            _action_version(ci, action),
+            _action_version(cleanup, action),
+            _action_version(sync, action),
+        }
+        assert len(versions) == 1, f"{action} versions differ: {versions}"

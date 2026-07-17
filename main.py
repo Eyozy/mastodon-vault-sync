@@ -6,6 +6,9 @@ import os
 import sys
 from pathlib import Path
 
+from src.api import fetch_mastodon_posts
+from src.config import get_config
+
 # 设置日志
 logging.basicConfig(
     level=logging.INFO,
@@ -14,30 +17,9 @@ logging.basicConfig(
 )
 
 
-def get_config():
-    from src.config import get_config as load_config
-
-    return load_config()
-
-
-def validate_config(config):
-    from src.config import validate_config as validate_loaded_config
-
-    return validate_loaded_config(config)
-
-
-async def fetch_mastodon_posts(config, since_id=None, page_limit=None, max_posts=None):
-    from src.api import fetch_mastodon_posts as fetch_posts
-
-    return await fetch_posts(
-        config, since_id=since_id, page_limit=page_limit, max_posts=max_posts
-    )
-
-
 def load_runtime_config():
-    config = get_config()
-    validate_config(config)
-    return config
+    # get_config() 内部已完成校验并回填默认值
+    return get_config()
 
 
 def resolve_runtime_paths(config):
@@ -110,7 +92,7 @@ def load_last_synced_id(state_file_path, is_full_sync):
     try:
         last_synced_id = json.loads(state_file_path.read_text())["last_synced_id"]
         return last_synced_id, False
-    except (json.JSONDecodeError, KeyError):
+    except (json.JSONDecodeError, KeyError, OSError):
         logging.warning("⚠️ 同步状态文件格式不正确，将执行全量同步。")
         return None, True
 
@@ -159,55 +141,42 @@ async def generate_html_output(
     html_filename = backup_config.get("html_filename", "index.html")
     html_filepath = backup_path / html_filename
 
+    needs_html = not html_filepath.exists() or is_full_sync or new_posts_count > 0
+    if not needs_html:
+        logging.info("✅ HTML 文件已存在且无新内容，跳过生成")
+        return
+
     if not html_filepath.exists():
         logging.info("🌐 HTML 文件不存在，准备首次生成...")
     elif is_full_sync:
         logging.info("🔄 全量同步模式，将重新生成 HTML...")
-    elif new_posts_count > 0:
-        logging.info(f"📊 检测到 {new_posts_count} 条新帖子，需要更新 HTML...")
     else:
-        logging.info("✅ HTML 文件已存在且无新内容，跳过生成")
-        return
+        logging.info(f"📊 检测到 {new_posts_count} 条新帖子，需要更新 HTML...")
 
-    posts_for_html = None
+    # 全量同步可直接复用本次已拉取数据；增量更新仍拉全量，保证页面完整。
     if is_full_sync and posts_to_process:
-        logging.info(f"📊 使用全量同步数据 ({len(posts_to_process)} 条帖子)")
         posts_for_html = posts_to_process
+        logging.info(f"📊 使用全量同步数据 ({len(posts_for_html)} 条帖子)")
     else:
         logging.info("📊 正在获取所有帖子用于 HTML 生成...")
-        all_posts_for_html = await fetch_mastodon_posts(config)
-        if all_posts_for_html:
-            logging.info(f"📊 成功获取 {len(all_posts_for_html)} 条帖子")
-            posts_for_html = all_posts_for_html
+        posts_for_html = await fetch_mastodon_posts(config)
+        if posts_for_html:
+            logging.info(f"📊 成功获取 {len(posts_for_html)} 条帖子")
         else:
             logging.error("❌ 无法从 API 获取帖子数据")
+            return
 
-    if posts_for_html:
-        generate_mastodon_html(posts_for_html, config, backup_path)
-        logging.info(f"✅ HTML 网页已生成，包含 {len(posts_for_html)} 条嘟文")
-    else:
-        logging.error("❌ 没有可用的帖子数据，无法生成 HTML")
+    generate_mastodon_html(posts_for_html, config, backup_path)
+    logging.info(f"✅ HTML 网页已生成，包含 {len(posts_for_html)} 条嘟文")
 
 
 def should_update_summary(is_full_sync, new_posts_count, backup_path, backup_config):
-    """
-    判断是否需要更新活动总结
-    """
     summary_filepath = backup_path / backup_config["summary_filename"]
-
-    # 全量同步时总是更新
     if is_full_sync:
         return True
-
-    # 首次运行时更新
     if not summary_filepath.exists():
         return True
-
-    # 有新帖子时更新
-    if new_posts_count > 0:
-        return True
-
-    return False
+    return new_posts_count > 0
 
 
 async def main_async():
@@ -220,9 +189,8 @@ async def main_async():
     except ValueError as e:
         logging.error(f"❌ 配置验证失败：{e}")
         return
-    except Exception as e:
-        # get_config 可能会抛出其他异常（如从 yaml 加载时）
-        logging.error(f"❌ 初始化失败：{e}")
+    except (FileNotFoundError, OSError) as e:
+        logging.error(f"❌ 配置加载失败：{e}")
         return
 
     (
@@ -234,7 +202,6 @@ async def main_async():
         media_folder_path,
     ) = resolve_runtime_paths(config)
     base_path_str = config["backup"]["path"]
-    # 仅在本地运行时，如果路径不是默认的"."，才显示提示信息
     if not os.environ.get("GITHUB_ACTIONS") and base_path_str != ".":
         logging.info(f"💾 所有备份文件将保存到指定目录：{backup_path.resolve()}")
     backup_path.mkdir(parents=True, exist_ok=True)
@@ -247,6 +214,7 @@ async def main_async():
 
     if is_cleanup_mode:
         from src.backup import cleanup_deleted_posts
+        from src.render import generate_activity_summary, generate_mastodon_html
 
         logging.info("🧹 正在检查服务器帖子，清理本地已删除内容...")
         server_posts = await fetch_mastodon_posts(config)
@@ -262,7 +230,6 @@ async def main_async():
             f"✅ 清理完成：删除 {deleted_posts} 个帖子文件，"
             f"删除 {deleted_media} 个媒体文件。"
         )
-        from src.render import generate_activity_summary, generate_mastodon_html
 
         generate_activity_summary(config, backup_path)
         if server_posts:
@@ -295,7 +262,6 @@ async def main_async():
     else:
         logging.info("✨ 没有新内容需要同步。")
 
-    # 统一的活动总结更新逻辑：智能同步和全量同步都会更新统计
     if should_update_summary(is_full_sync, new_posts_count, backup_path, backup_config):
         from src.render import generate_activity_summary
 
@@ -307,7 +273,6 @@ async def main_async():
     else:
         logging.info("📊 没有新内容需要更新，跳过活动总结生成。")
 
-    # 生成 HTML 网页 - 智能检测是否需要更新
     try:
         await generate_html_output(
             config,
@@ -317,12 +282,10 @@ async def main_async():
             new_posts_count,
             posts_to_process,
         )
-
-    except Exception as e:
+    except (OSError, ValueError) as e:
         logging.error(f"❌ HTML 网页生成失败：{e}")
-        import traceback
-
-        logging.error(traceback.format_exc())
+    except Exception:
+        logging.exception("❌ HTML 网页生成失败")
 
     logging.info("========================================")
     logging.info("同步完成！")
@@ -347,7 +310,8 @@ def resolve_venv_python():
 
 
 def restart_with_venv_python():
-    if os.environ.get("MASTODON_VAULT_SYNC_NO_VENV_REEXEC"):
+    # 默认关闭；需要时设置 MASTODON_VAULT_SYNC_AUTO_VENV=1
+    if os.environ.get("MASTODON_VAULT_SYNC_AUTO_VENV") != "1":
         return
 
     venv_python = resolve_venv_python()
@@ -358,6 +322,7 @@ def restart_with_venv_python():
     if Path(sys.prefix).resolve() == venv_root.resolve():
         return
 
+    logging.info(f"Using project venv python: {venv_python}")
     os.execv(
         str(venv_python),
         [str(venv_python), str(Path(__file__).resolve()), *sys.argv[1:]],
@@ -367,7 +332,6 @@ def restart_with_venv_python():
 if __name__ == "__main__":
     restart_with_venv_python()
 
-    # 统一使用 CLI 入口
     from src.cli import main_cli
 
     main_cli()
