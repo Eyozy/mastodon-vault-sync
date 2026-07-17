@@ -87,5 +87,5 @@ def test_gitignore_tracks_sync_state_file_for_actions_incremental_sync():
 def test_cleanup_workflow_uses_current_action_versions():
     """cleanup workflow 应与其他 workflow 使用一致的 action 主版本"""
     content = read_text(".github/workflows/cleanup.yml")
-    assert "actions/checkout@v4" in content
-    assert "actions/setup-python@v5" in content
+    assert "actions/checkout@v5" in content
+    assert "actions/setup-python@v6" in content
