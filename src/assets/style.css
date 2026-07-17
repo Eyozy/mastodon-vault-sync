@@ -602,13 +602,13 @@ h4, .h4 {
 #imageModal .modal-content {
     margin: auto;
     display: block;
-    max-width: min(90vw, 100%);
-    max-height: min(90vh, 90dvh);
+    max-width: min(92vw, 100%);
+    max-height: calc(100dvh - 7.5rem - env(safe-area-inset-top) - env(safe-area-inset-bottom));
     width: auto;
     height: auto;
     object-fit: contain;
     position: absolute;
-    top: 50%;
+    top: calc(50% + 0.75rem);
     left: 50%;
     transform: translate(-50%, -50%);
     transform-origin: center;
@@ -619,18 +619,19 @@ h4, .h4 {
 }
 #imageModal #caption {
     position: absolute;
+    top: max(1rem, env(safe-area-inset-top));
     left: 50%;
-    bottom: max(16px, env(safe-area-inset-bottom));
+    right: 4.5rem;
     transform: translateX(-50%);
     margin: 0;
     display: block;
-    width: min(80%, 700px);
-    max-height: 20vh;
+    width: min(70%, 700px);
+    max-height: 2.5rem;
     overflow: hidden;
     text-align: center;
     color: #ccc;
-    padding: 10px 0;
-    z-index: 1;
+    padding: 0.25rem 0;
+    z-index: 2;
     pointer-events: none;
 }
 @keyframes zoom {
@@ -645,13 +646,18 @@ h4, .h4 {
 }
 #imageModal .close {
     position: absolute;
-    top: max(12px, env(safe-area-inset-top));
-    right: max(16px, env(safe-area-inset-right));
-    z-index: 2;
+    top: max(0.5rem, env(safe-area-inset-top));
+    right: max(0.75rem, env(safe-area-inset-right));
+    z-index: 3;
     color: #f1f1f1;
-    font-size: 40px;
+    font-size: 2.25rem;
     font-weight: bold;
     line-height: 1;
+    width: 2.75rem;
+    height: 2.75rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     transition: 0.3s;
     cursor: pointer;
 }
