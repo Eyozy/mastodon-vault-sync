@@ -1091,19 +1091,26 @@ input:focus-visible {
         align-self: center;
     }
     .pagination {
-        flex-direction: column;
-        gap: 0.75rem;
+        flex-direction: row;
+        flex-wrap: nowrap;
+        justify-content: space-between;
+        gap: 0.25rem;
         margin: 1rem 0;
         padding: 0.75rem 0;
     }
     .pagination-btn {
-        padding: 0.5rem 0.75rem;
-        font-size: 0.85rem;
+        padding: 0.4rem 0.5rem;
+        font-size: 0.8rem;
         min-height: 36px;
+        flex: 1;
+        justify-content: center;
+        white-space: nowrap;
     }
     .pagination-info {
-        font-size: 0.85rem;
+        font-size: 0.8rem;
         margin: 0;
+        white-space: nowrap;
+        flex-shrink: 0;
     }
     .back-to-top {
         bottom: 1rem;
