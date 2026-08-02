@@ -1093,22 +1093,21 @@ input:focus-visible {
     .pagination {
         flex-direction: row;
         flex-wrap: nowrap;
-        justify-content: space-between;
-        gap: 0.25rem;
+        justify-content: center;
+        gap: 0.75rem;
         margin: 1rem 0;
         padding: 0.75rem 0;
     }
     .pagination-btn {
-        padding: 0.4rem 0.5rem;
+        padding: 0.4rem 0.8rem;
         font-size: 0.8rem;
         min-height: 36px;
-        flex: 1;
         justify-content: center;
         white-space: nowrap;
     }
     .pagination-info {
         font-size: 0.8rem;
-        margin: 0;
+        margin: 0 0.25rem;
         white-space: nowrap;
         flex-shrink: 0;
     }
