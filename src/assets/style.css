@@ -684,27 +684,20 @@ body.modal-open {
 .status-content a {
     color: var(--accent-color);
     text-decoration: none;
-    position: relative;
-    transition: color 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    background-image: linear-gradient(currentColor, currentColor);
+    background-position: 0 100%;
+    background-repeat: no-repeat;
+    background-size: 0 2px;
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
+    transition: color 0.2s cubic-bezier(0.4, 0, 0.2, 1), background-size 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     word-wrap: break-word;
     overflow-wrap: break-word;
     word-break: break-word;
 }
-.status-content a::after {
-    content: '';
-    position: absolute;
-    width: 0;
-    height: 2px;
-    bottom: -2px;
-    left: 0;
-    background-color: var(--accent-color);
-    transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
 .status-content a:hover {
     color: var(--accent-hover);
-}
-.status-content a:hover::after {
-    width: 100%;
+    background-size: 100% 2px;
 }
 .media-gallery {
     display: grid;
