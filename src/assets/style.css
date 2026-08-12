@@ -239,9 +239,11 @@ h4, .h4 {
     align-items: center;
     justify-content: center;
 }
-.theme-toggle:hover {
-    background-color: var(--bg-hover);
-    transform: rotate(15deg);
+@media (hover: hover) {
+    .theme-toggle:hover {
+        background-color: var(--bg-hover);
+        transform: rotate(15deg);
+    }
 }
 .theme-toggle:focus,
 .theme-toggle:active {
